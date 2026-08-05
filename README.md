@@ -16,7 +16,7 @@ what the console was throwing at the time.
 browser — shadow DOM, second React root
    │
    │  POST /api/feedback
-   │  { schemaVersion, project, type, severity, what, why, how, context }
+   │  { schemaVersion, project, type, severity, what, why, context }
    ▼
 Next.js route handler
    │  honeypot · rate limit · validate · re-derive UA from raw · redact query values
@@ -35,7 +35,7 @@ Google Sheet
 ## Install
 
 ```bash
-npm i github:marcin-laskowski/feedback#v0.1.0
+npm i github:marcin-laskowski/feedback#v0.1.2
 ```
 
 The package ships TypeScript source and is compiled by the host app:
