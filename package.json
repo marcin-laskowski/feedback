@@ -1,0 +1,56 @@
+{
+  "name": "@unhyped/feedback",
+  "version": "0.1.0",
+  "description": "In-page feedback widget for Next.js. Reports land in a Google Sheet through an Apps Script sink — no database, no vendor, no cookie banner.",
+  "license": "MIT",
+  "author": "Marcin Laskowski",
+  "homepage": "https://github.com/marcin-laskowski/feedback#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcin-laskowski/feedback.git"
+  },
+  "bugs": {
+    "url": "https://github.com/marcin-laskowski/feedback/issues"
+  },
+  "keywords": [
+    "feedback",
+    "feedback-widget",
+    "bug-report",
+    "nextjs",
+    "react",
+    "google-apps-script",
+    "google-sheets",
+    "shadow-dom"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./src/client/errorBuffer.ts",
+    "./src/client/nav.ts"
+  ],
+  "exports": {
+    ".": "./src/shared/index.ts",
+    "./client": "./src/client/index.ts",
+    "./server": "./src/server/index.ts"
+  },
+  "files": [
+    "src",
+    "apps-script",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "react-dom": ">=19"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

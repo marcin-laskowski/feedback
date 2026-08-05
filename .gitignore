@@ -1,0 +1,11 @@
+node_modules/
+*.tsbuildinfo
+
+# clasp — credentials, and the script id (public repo: no reason to publish it)
+.clasprc.json
+.clasp.json
+
+# Secrets live in Apps Script Script Properties and in the host's environment.
+# Never here: FEEDBACK_TOKEN, FEEDBACK_SINK_URL, SHEET_ID.
+.env
+.env.local
