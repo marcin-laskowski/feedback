@@ -4,7 +4,7 @@
  * Receives feedback reports and appends them to a Sheet.
  * Called server-side only (from a Next.js route handler), never from a browser.
  *
- * Setup: see README.md. Run setup_() once from the editor before deploying.
+ * Setup: see README.md. Run setup() once from the editor before deploying.
  */
 
 var SCHEMA_VERSION = 1;
@@ -260,9 +260,15 @@ function json_(obj) {
 }
 
 // ----------------------------------------------------------------- setup / test
+//
+// These two are deliberately NOT suffixed with an underscore, unlike every
+// other helper in this file. In Apps Script a trailing underscore marks a
+// function as private, and a private function does not appear in the editor's
+// Run dropdown — which makes it impossible to run the one thing you are
+// supposed to run before deploying. Do not "fix" them to match the convention.
 
 /** Run once from the editor, after setting the script properties. */
-function setup_() {
+function setup() {
   var sheet = sheet_();
   if (sheet.getLastRow() === 0) writeHeaders_(sheet);
   Logger.log('Sheet ready: ' + sheet.getName() + ' with ' + HEADERS.length + ' columns');
@@ -270,7 +276,7 @@ function setup_() {
 }
 
 /** Run from the editor to append a row without deploying. */
-function testLocal_() {
+function testLocal() {
   var res = doPost({
     postData: {
       contents: JSON.stringify({

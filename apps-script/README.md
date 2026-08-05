@@ -14,7 +14,7 @@ New Google Sheet, name it whatever. Copy the ID from the URL:
 https://docs.google.com/spreadsheets/d/<THIS_PART>/edit
 ```
 
-Don't create headers by hand — `setup_()` writes them, in the exact order `Code.gs` expects.
+Don't create headers by hand — `setup()` writes them, in the exact order `Code.gs` expects.
 
 ## 2. Create the script
 
@@ -32,11 +32,11 @@ Optionally `DEPLOYMENT_VERSION` — a short label written into every row, so you
 
 ## 3. Initialise
 
-In the editor, select `setup_` and run it. Authorise when prompted (it's your own script touching your own sheet).
+In the editor, select `setup` and run it. Authorise when prompted (it's your own script touching your own sheet).
 
 Check the log: headers written, token present. Look at the sheet — row 1 bold and frozen, 32 columns.
 
-Then run `testLocal_`. A row should appear. **Check cell H2** — it must read `'=IMPORTXML(...)` with a leading apostrophe, displayed as text. If Sheets evaluated it instead, stop and fix the escape before going further.
+Then run `testLocal`. A row should appear. **Check cell H2** — it must read `'=IMPORTXML(...)` with a leading apostrophe, displayed as text. If Sheets evaluated it instead, stop and fix the escape before going further.
 
 Check `page_url` too: `token=SECRET123` must have become `token=[redacted]`, while `utm_source=nl` survives intact.
 
