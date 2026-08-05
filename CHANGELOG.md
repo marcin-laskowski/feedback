@@ -7,6 +7,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `setup_()` and `testLocal_()` renamed to `setup()` and `testLocal()`. A
+  trailing underscore marks a function as private in Apps Script, and a private
+  function is not listed in the editor's Run dropdown — so the setup step the
+  README told you to run could not be run at all. Everything downstream of it
+  (headers, authorisation, the escape check) silently never happened.
+
+- The warm-up `GET` reported on itself rather than on the sink: it answered
+  `{ ok: true }` as long as the fetch resolved, including when Google returned
+  403 and a login page because the Apps Script deployment was not set to
+  "Anyone". It now reads the body, requires JSON, and answers
+  `{ sink: "ok" | "unreachable" | "timeout" | "unconfigured" }`. `curl` on the
+  route is now a real health check.
+- A misconfigured deployment surfaced as `SyntaxError: Unexpected token '<'`
+  from `res.json()`, which describes the symptom and not the cause. The POST
+  path now reads text first and logs the status, content type, and the start of
+  the body, with the deploy setting to check.
+
 ## [0.1.0] — 2026-08-05
 
 First release. M1 scope.
