@@ -69,28 +69,50 @@ function config(): { url: string; token: string } | null {
 }
 
 /**
- * Warm-up ping. Apps Script cold start is 1–3 s and is the entire p95 budget
- * now that there is no second latency mitigation left. The widget fires this
- * when the panel opens; by the time the user has typed two sentences the
- * container is awake.
+ * Warm-up ping, and the only health check this system has.
  *
- * We await the ping (a serverless function can be frozen the moment it
- * returns, which would cancel an unawaited fetch) but never fail on it.
+ * Apps Script cold start is 1–3 s and is the entire p95 budget now that there
+ * is no second latency mitigation left. The widget fires this when the panel
+ * opens and ignores the answer; by the time the user has typed two sentences
+ * the container is awake.
+ *
+ * It reports on the sink rather than on itself, which costs one body read and
+ * buys the one thing worth having here: `curl /api/feedback` tells you whether
+ * the sink is actually configured. An earlier version returned `{ ok: true }`
+ * as long as the fetch resolved — including when Google answered 403 with a
+ * login page, which is exactly the failure this endpoint should surface.
  */
 export async function GET(): Promise<Response> {
   const cfg = config();
-  if (!cfg) return Response.json({ ok: false, warm: false }, { status: 503 });
+  if (!cfg) {
+    return Response.json({ ok: false, warm: false, sink: "unconfigured" }, { status: 503 });
+  }
 
   try {
-    await fetch(cfg.url, {
+    const res = await fetch(cfg.url, {
       method: "GET",
       redirect: "follow",
       signal: AbortSignal.timeout(WARMUP_TIMEOUT_MS),
     });
-  } catch {
-    // A cold sink that is still waking up is the normal case here.
+    const body = await res.text();
+
+    // The sink answers JSON. HTML means Google answered instead of the script.
+    if (!res.ok || !body.trimStart().startsWith("{")) {
+      console.error(
+        `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} — ` +
+          `check that the Apps Script deployment is a Web app with access "Anyone", ` +
+          `and that FEEDBACK_SINK_URL ends in /exec`
+      );
+      return Response.json({ ok: false, warm: false, sink: "unreachable" }, { status: 502 });
+    }
+
+    return Response.json({ ok: true, warm: true, sink: "ok" });
+  } catch (e) {
+    // A cold sink still waking up lands here too, so this is a warning, not a
+    // failure of the widget.
+    console.error("[feedback] warm-up failed:", e);
+    return Response.json({ ok: false, warm: false, sink: "timeout" }, { status: 504 });
   }
-  return Response.json({ ok: true, warm: true });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -183,7 +205,20 @@ export async function POST(req: Request): Promise<Response> {
       redirect: "follow",
       signal: AbortSignal.timeout(SINK_TIMEOUT_MS),
     });
-    result = (await res.json()) as SinkResponse;
+
+    // Read as text first. When the deployment is misconfigured Google answers
+    // with an HTML login page, and `res.json()` throws a parse error that says
+    // nothing about the actual problem — which is a deploy setting, not JSON.
+    const body = await res.text();
+    try {
+      result = JSON.parse(body) as SinkResponse;
+    } catch {
+      console.error(
+        `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} ` +
+          `instead of JSON: ${body.slice(0, 120)}`
+      );
+      return json({ ok: false, error: "unavailable" }, 502);
+    }
   } catch (e) {
     console.error("[feedback] sink unreachable:", e);
     return json({ ok: false, error: "unavailable" }, 502);
