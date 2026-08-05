@@ -84,8 +84,8 @@ button, input, textarea {
    here, because the label swaps between "Zgłoś uwagę" and "Zamknij". */
 .fb-fab {
   position: fixed;
-  height: 38px;
-  padding: 0 14px 0 11px;
+  height: 44px;
+  padding: 0 16px 0 13px;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
@@ -93,7 +93,7 @@ button, input, textarea {
   border-radius: 999px;
   background: var(--fb-accent);
   color: var(--fb-on-accent);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.005em;
   white-space: nowrap;
@@ -123,7 +123,8 @@ button, input, textarea {
    inside the circle, which stacked with the focus outline into a bullseye —
    two concentric rings around a cross. A filled shape needs one edge, not two. */
 .fb-fab[data-open="true"] {
-  padding: 0 11.5px;
+  /* 14 + 16 icon + 14 = 44, so the pill collapses into an exact circle. */
+  padding: 0 14px;
   background: var(--fb-surface-2);
   color: var(--fb-ink);
 }
@@ -142,7 +143,7 @@ button, input, textarea {
 .fb-fab__label {
   display: grid;
   grid-template-columns: 1fr;
-  margin-left: 7px;
+  margin-left: 8px;
   transition:
     grid-template-columns var(--fb-enter) var(--fb-ease-enter),
     margin-left var(--fb-enter) var(--fb-ease-enter),

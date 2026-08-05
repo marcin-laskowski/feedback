@@ -500,8 +500,8 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
 function FeedbackIcon() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -519,8 +519,8 @@ function FeedbackIcon() {
 function CloseIcon() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

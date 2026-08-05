@@ -26,7 +26,7 @@ const DEFAULT_MARGIN = 28;
 /** Below this, a pointer movement is a click with a shaky hand, not a drag. */
 const DRAG_THRESHOLD = 4;
 /** Used until the element has been measured. Roughly the closed pill. */
-const FALLBACK_SIZE = { w: 140, h: 40 };
+const FALLBACK_SIZE = { w: 150, h: 44 };
 
 export type Point = { x: number; y: number };
 export type Size = { w: number; h: number };
