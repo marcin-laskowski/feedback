@@ -23,6 +23,13 @@ export const CSS = `
   --fb-on-accent: #ffffff;
   --fb-danger: #b4291f;
   --fb-radius: 12px;
+  /* Decelerating curve — fast off the mark, long settle. The thing that makes
+     an interface feel considered rather than snappy. */
+  --fb-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Leaving is not the mirror of arriving. Exits get out of the way. */
+  --fb-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --fb-enter: 280ms;
+  --fb-exit: 150ms;
   --fb-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --fb-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -62,6 +69,14 @@ button, input, textarea {
   outline-offset: 2px;
 }
 
+/* The trigger is round and already sits on its own shadow, so a ring hugging
+   it at 2 px reads as part of the shape rather than as focus. Push it out. */
+.fb-fab:focus-visible { outline-offset: 4px; }
+
+/* Pointer users get no ring at all — Safari hands buttons :focus after a click,
+   which is where the stacked-rings look came from in the first place. */
+.fb-fab:focus:not(:focus-visible) { outline: none; }
+
 /* ---------------------------------------------------------------- trigger */
 
 /* Position comes from inline style — the trigger is draggable and its place is
@@ -74,7 +89,6 @@ button, input, textarea {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   border: 0;
   border-radius: 999px;
   background: var(--fb-accent);
@@ -90,12 +104,61 @@ button, input, textarea {
   /* Restrained: enough separation from the page beneath, not a floating slab.
      Static, never a hover lift. */
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.18);
-  transition: background-color 140ms ease;
+  transition:
+    background-color var(--fb-enter) var(--fb-ease-enter),
+    color var(--fb-enter) var(--fb-ease-enter),
+    padding var(--fb-enter) var(--fb-ease-enter),
+    box-shadow var(--fb-enter) var(--fb-ease-enter);
 }
 
 .fb-fab:hover { background: var(--fb-accent-strong); }
 .fb-fab[data-dragging="true"] { cursor: grabbing; }
-.fb-fab svg { display: block; }
+.fb-fab svg { display: block; flex: none; }
+
+/* Open: the pill collapses to a neutral circle holding an ✕. Secondary,
+   because once the panel is up the trigger is no longer the thing asking for
+   attention — the form is.
+
+   Tone carries that on its own. An earlier version also drew a hairline ring
+   inside the circle, which stacked with the focus outline into a bullseye —
+   two concentric rings around a cross. A filled shape needs one edge, not two. */
+.fb-fab[data-open="true"] {
+  padding: 0 11.5px;
+  background: var(--fb-surface-2);
+  color: var(--fb-ink);
+}
+
+.fb-fab[data-open="true"]:hover { background: var(--fb-line-2); }
+
+/* The label collapses rather than disappearing. A grid column animating from
+   1fr to 0fr is the one way to transition intrinsic width, so the pill morphs
+   into the circle instead of snapping between two shapes.
+
+   The gap between icon and text is a MARGIN on the collapsing element, not
+   padding on the text inside it. Padding inside a box that has been squeezed
+   to zero width cannot go below the padding itself, so it survived the
+   collapse as a stubborn 7 px on the right of the ✕ — which is what pushed the
+   circle off centre and out of line with the panel. */
+.fb-fab__label {
+  display: grid;
+  grid-template-columns: 1fr;
+  margin-left: 7px;
+  transition:
+    grid-template-columns var(--fb-enter) var(--fb-ease-enter),
+    margin-left var(--fb-enter) var(--fb-ease-enter),
+    opacity 160ms ease;
+}
+
+.fb-fab__label > span {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.fb-fab[data-open="true"] .fb-fab__label {
+  grid-template-columns: 0fr;
+  margin-left: 0;
+  opacity: 0;
+}
 
 /* --------------------------------------------------------------- backdrop */
 
@@ -105,15 +168,15 @@ button, input, textarea {
 
 /* ------------------------------------------------------------------ panel */
 
-/* Default anchoring: bottom centre, above the trigger's default spot. On
-   desktop an inline style overrides left/top/bottom so the panel follows the
-   trigger wherever it was dragged. On mobile the media query below wins and
-   the panel is a sheet regardless of where the trigger sits. */
+/* Fallback anchoring, used only for the frame before the trigger has been
+   measured. On desktop an inline style overrides left/top/bottom so the panel
+   follows the trigger wherever it was dragged. On mobile the media query below
+   wins and the panel is a sheet regardless of where the trigger sits. */
 .fb-panel {
   position: fixed;
-  left: 50%;
-  bottom: 76px;
-  transform: translateX(-50%);
+  right: 16px;
+  bottom: 70px;
+  transform: none;
   width: 380px;
   max-height: min(640px, 100dvh - 32px);
   pointer-events: auto;
@@ -123,15 +186,29 @@ button, input, textarea {
   border: 1px solid var(--fb-line);
   border-radius: var(--fb-radius);
   overflow: hidden;
-  animation: fb-rise 160ms ease-out;
+  animation: fb-in var(--fb-enter) var(--fb-ease-enter);
 }
 
-/* Opacity only. The panel's transform carries its centring on the default
-   anchor, and an animation on the same property would fight it and snap on the
-   last frame. */
-@keyframes fb-rise {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+/* Grows out of the corner it is docked to — transform-origin is set inline to
+   whichever corner the trigger sits at, so the panel always appears to come
+   from the button rather than from nowhere. The last keyframe is "none", which
+   is also what the inline transform is, so nothing snaps when the animation
+   hands back control. */
+@keyframes fb-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Leaving is shorter and shallower than arriving. A panel that dismisses at
+   the same pace it appeared feels reluctant. */
+.fb-panel[data-closing="true"] {
+  animation: fb-out var(--fb-exit) var(--fb-ease-exit) forwards;
+  pointer-events: none;
+}
+
+@keyframes fb-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: scale(0.97); }
 }
 
 .fb-titlebar { display: none; }
@@ -341,6 +418,17 @@ button, input, textarea {
     inset: 0;
     pointer-events: auto;
     background: rgba(0, 0, 0, 0.32);
+    animation: fb-fade var(--fb-enter) var(--fb-ease-enter);
+  }
+
+  .fb-backdrop[data-closing="true"] {
+    animation: fb-fade var(--fb-exit) var(--fb-ease-exit) reverse forwards;
+    pointer-events: none;
+  }
+
+  @keyframes fb-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
 
   .fb-fab[data-open="true"] { display: none; }
@@ -355,12 +443,23 @@ button, input, textarea {
     max-height: min(88dvh, 100dvh - 24px);
     border-radius: 16px 16px 0 0;
     border-bottom: 0;
-    animation: fb-sheet 180ms ease-out;
+    animation: fb-sheet-in var(--fb-enter) var(--fb-ease-enter);
   }
 
-  @keyframes fb-sheet {
-    from { transform: translateY(12px); }
-    to   { transform: none; }
+  .fb-panel[data-closing="true"] {
+    animation: fb-sheet-out var(--fb-exit) var(--fb-ease-exit) forwards;
+  }
+
+  /* The sheet slides, it does not scale — on a bottom sheet the edge of the
+     screen is the origin, and scaling from it looks like a mistake. */
+  @keyframes fb-sheet-in {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  @keyframes fb-sheet-out {
+    from { opacity: 1; transform: none; }
+    to   { opacity: 0; transform: translateY(18px); }
   }
 
   /* The sheet covers the FAB, so it needs its own way out (D21). The handle is
@@ -398,8 +497,25 @@ button, input, textarea {
   }
 }
 
+/* Reduced motion keeps the fades — they carry the state change — and drops
+   everything that moves or resizes. The label stops collapsing and simply
+   goes, which is the one place the two modes look different. */
 @media (prefers-reduced-motion: reduce) {
-  .fb-panel { animation: none; }
+  :root, :host { --fb-enter: 120ms; --fb-exit: 100ms; }
+
+  .fb-panel,
+  .fb-panel[data-closing="true"] {
+    animation-name: fb-fade-safe;
+  }
+
+  @keyframes fb-fade-safe {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .fb-panel[data-closing="true"] { animation-direction: reverse; }
+
   .fb-fab, .fb-pill, .fb-input, .fb-send, .fb-strip__chevron { transition: none; }
+  .fb-fab__label { transition: none; }
 }
 `;
