@@ -157,20 +157,6 @@ export function Panel({
             ))}
           </div>
         </div>
-
-        <div className="fb-field">
-          <label className="fb-label" htmlFor="fb-how">
-            {strings.howLabel}
-          </label>
-          <AutoTextarea
-            id="fb-how"
-            value={draft.how}
-            placeholder={strings.howPlaceholder}
-            invalid={false}
-            disabled={busy}
-            onChange={(how) => onChange({ how })}
-          />
-        </div>
       </div>
 
       <div className="fb-foot">

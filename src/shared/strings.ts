@@ -39,8 +39,6 @@ export const strings = {
   whatPlaceholder: "Cennik nie ładuje się po kliknięciu „Zobacz plany”.",
   whyLabel: "Dlaczego to problem?",
   whyPlaceholder: "Nie mogę pokazać oferty klientowi na jutrzejszym spotkaniu.",
-  howLabel: "Jak to widzisz? (opcjonalnie)",
-  howPlaceholder: "Może wystarczy poprawić link.",
 
   send: "Wyślij",
   sending: "Wysyłam…",

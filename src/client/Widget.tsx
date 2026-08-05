@@ -17,7 +17,7 @@
  * "Zacznij od nowa" is the discard.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { SCHEMA_VERSION, type FeedbackContext, type SubmitResponse } from "../shared/types";
 import { stripDeepLinkParam } from "../shared/redact";
 import { strings } from "../shared/strings";
@@ -26,6 +26,7 @@ import { collectContext } from "./context";
 import { clearDraft, readDraft, writeDraft, type Draft } from "./draft";
 import { initNav } from "./nav";
 import { read, write } from "./storage";
+import { useDraggable } from "./useDraggable";
 import { Panel, type PanelStatus } from "./Panel";
 
 export type Reveal = "always" | "invited";
@@ -45,7 +46,13 @@ const RESIZE_DEBOUNCE_MS = 200;
 const SUCCESS_CLOSE_MS = 4_000;
 const WARMUP_COOLDOWN_MS = 60_000;
 
-const EMPTY_DRAFT: Draft = { type: "bug", severity: "annoying", what: "", why: "", how: "" };
+const EMPTY_DRAFT: Draft = { type: "bug", severity: "annoying", what: "", why: "" };
+
+/** Panel width on desktop. Keep in sync with `.fb-panel` in styles.ts. */
+const PANEL_WIDTH = 380;
+/** Below this much space above the trigger, the panel opens downwards instead. */
+const PANEL_MIN_ABOVE = 320;
+const MOBILE_QUERY = "(max-width: 639px)";
 
 const FOCUSABLE =
   'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -60,10 +67,42 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   const [stripExpanded, setStripExpanded] = useState(false);
   const [context, setContext] = useState<FeedbackContext | null>(null);
 
+  const [isMobile, setIsMobile] = useState(false);
+
   const panelRef = useRef<HTMLDivElement>(null);
   const pathnameRef = useRef<string>("");
   const warmedAt = useRef(0);
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const drag = useDraggable(triggerRef);
+
+  useEffect(() => {
+    const query = window.matchMedia(MOBILE_QUERY);
+    const update = () => setIsMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  /**
+   * The panel follows the trigger. Anchored above it when there is room,
+   * flipped below when the trigger has been dragged near the top, and clamped
+   * so it never leaves the viewport. On mobile it stays a bottom sheet and the
+   * inline style is withheld — an inline value would beat the media query.
+   */
+  const panelStyle = useMemo<CSSProperties | undefined>(() => {
+    if (isMobile || !drag.pos) return undefined;
+
+    const left = Math.min(
+      Math.max(8, drag.pos.x + drag.size.w / 2 - PANEL_WIDTH / 2),
+      Math.max(8, window.innerWidth - PANEL_WIDTH - 8)
+    );
+
+    return drag.pos.y > PANEL_MIN_ABOVE
+      ? { left, right: "auto", top: "auto", bottom: window.innerHeight - drag.pos.y + 8, transform: "none" }
+      : { left, right: "auto", bottom: "auto", top: drag.pos.y + drag.size.h + 8, transform: "none" };
+  }, [isMobile, drag.pos, drag.size]);
 
   const openPanel = useCallback(() => {
     pathnameRef.current = window.location.pathname;
@@ -145,7 +184,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   useEffect(() => {
     if (!open || status === "success") return;
     const timer = setTimeout(() => {
-      if (draft.what.trim() || draft.why.trim() || draft.how.trim()) {
+      if (draft.what.trim() || draft.why.trim()) {
         writeDraft(pathnameRef.current, draft);
       }
     }, DRAFT_DEBOUNCE_MS);
@@ -244,7 +283,6 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
           severity: draft.severity,
           what: draft.what,
           why: draft.why,
-          how: draft.how,
           context: collectContext(),
         }),
       });
@@ -306,6 +344,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
           aria-modal="true"
           aria-label={strings.panelTitle}
           ref={panelRef}
+          style={panelStyle}
           onMouseEnter={holdSuccess}
           onFocusCapture={holdSuccess}
         >
@@ -326,26 +365,79 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
         </div>
       )}
 
-      {/* On desktop the FAB doubles as the close control (the panel sits 8 px
-          above it). On mobile the sheet covers it, so CSS hides it and the
-          title bar's close button takes over (D21). */}
+      {/* Icon plus label: an unlabelled circle is a guessing game on a site
+          nobody has been briefed about. On desktop it doubles as the close
+          control (the panel is anchored 8 px away); on mobile the sheet covers
+          it, so CSS hides it and the title bar's close button takes over (D21).
+
+          A drag that ends is not a click: `consumedByDrag` swallows the release
+          that moved the trigger, or every reposition would also open the panel.
+
+          `visibility` rather than a conditional render — the element has to be
+          in the DOM to be measured, and its measured width is what the default
+          position and the panel's anchor are derived from. */}
       <button
         type="button"
         className="fb-fab"
+        ref={triggerRef}
+        style={
+          drag.pos
+            ? { left: drag.pos.x, top: drag.pos.y }
+            : { left: 0, top: 0, visibility: "hidden" }
+        }
         data-open={open ? "true" : "false"}
+        data-dragging={drag.dragging ? "true" : "false"}
         aria-expanded={open}
-        aria-label={fabLabel}
-        onClick={() => (open ? closePanel() : openPanel())}
+        onPointerDown={drag.onPointerDown}
+        onPointerMove={drag.onPointerMove}
+        onPointerUp={drag.onPointerUp}
+        onPointerCancel={drag.onPointerUp}
+        onClick={() => {
+          if (drag.consumedByDrag()) return;
+          if (open) closePanel();
+          else openPanel();
+        }}
       >
-        {open ? (
-          <span aria-hidden="true">✕</span>
-        ) : (
-          <>
-            <span className="fb-dot" aria-hidden="true" />
-            <span className="fb-fab__label">{strings.fab}</span>
-          </>
-        )}
+        {open ? <CloseIcon /> : <FeedbackIcon />}
+        <span>{fabLabel}</span>
       </button>
     </>
+  );
+}
+
+function FeedbackIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
   );
 }

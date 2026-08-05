@@ -21,7 +21,6 @@ export type Draft = {
   severity: FeedbackSeverity;
   what: string;
   why: string;
-  how: string;
 };
 
 const PREFIX = "fb.draft:";
@@ -35,7 +34,7 @@ export function readDraft(pathname: string): Draft | null {
   if (!draft) return null;
   // An empty draft is not a draft — it would trigger the restore line for
   // someone who only opened the panel and closed it.
-  if (!draft.what?.trim() && !draft.why?.trim() && !draft.how?.trim()) return null;
+  if (!draft.what?.trim() && !draft.why?.trim()) return null;
   return draft;
 }
 

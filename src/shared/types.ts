@@ -59,7 +59,13 @@ export type FeedbackSubmission = {
   severity: FeedbackSeverity;
   what: string;
   why: string;
-  how: string;
+  /**
+   * Dropped from the UI — the two questions that matter are what and why, and a
+   * third optional box mostly collected empty strings. The column stays in the
+   * sheet (additive-only) and the field stays in the contract, so a consumer
+   * that wants it back does not need a schema change.
+   */
+  how?: string;
   context: FeedbackContext;
   /** Honeypot. Humans never see the input, so a value here means a bot. */
   website?: string;

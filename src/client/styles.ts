@@ -15,7 +15,11 @@ export const CSS = `
   --fb-surface-2: #f4f5f6;
   --fb-line: rgba(22, 24, 29, 0.14);
   --fb-line-2: rgba(22, 24, 29, 0.07);
-  --fb-accent: #16181d;
+  /* Blue on purpose. The widget is a tool laid over somebody else's design
+     system, and reading as "not part of this site" is the point — a trigger
+     that blends in is a trigger nobody clicks. */
+  --fb-accent: #2563eb;
+  --fb-accent-strong: #1d4ed8;
   --fb-on-accent: #ffffff;
   --fb-danger: #b4291f;
   --fb-radius: 12px;
@@ -38,8 +42,9 @@ export const CSS = `
     --fb-surface-2: #24272d;
     --fb-line: rgba(236, 238, 241, 0.16);
     --fb-line-2: rgba(236, 238, 241, 0.08);
-    --fb-accent: #eceef1;
-    --fb-on-accent: #16181d;
+    --fb-accent: #3b82f6;
+    --fb-accent-strong: #2563eb;
+    --fb-on-accent: #ffffff;
     --fb-danger: #ff8b80;
   }
 }
@@ -59,34 +64,38 @@ button, input, textarea {
 
 /* ---------------------------------------------------------------- trigger */
 
+/* Position comes from inline style — the trigger is draggable and its place is
+   remembered per browser. Its size is measured at runtime rather than pinned
+   here, because the label swaps between "Zgłoś uwagę" and "Zamknij". */
 .fb-fab {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  height: 38px;
+  padding: 0 14px 0 11px;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--fb-line);
+  gap: 7px;
+  border: 0;
   border-radius: 999px;
-  background: var(--fb-surface);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 140ms ease, background-color 140ms ease;
-}
-
-.fb-fab:hover { border-color: var(--fb-accent); }
-.fb-fab[data-open="true"] .fb-fab__label { display: none; }
-
-.fb-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
   background: var(--fb-accent);
+  color: var(--fb-on-accent);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: grab;
+  /* Without this the browser claims the gesture for scrolling on touch and the
+     drag never starts. */
+  touch-action: none;
+  /* Restrained: enough separation from the page beneath, not a floating slab.
+     Static, never a hover lift. */
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.18);
+  transition: background-color 140ms ease;
 }
+
+.fb-fab:hover { background: var(--fb-accent-strong); }
+.fb-fab[data-dragging="true"] { cursor: grabbing; }
+.fb-fab svg { display: block; }
 
 /* --------------------------------------------------------------- backdrop */
 
@@ -96,10 +105,15 @@ button, input, textarea {
 
 /* ------------------------------------------------------------------ panel */
 
+/* Default anchoring: bottom centre, above the trigger's default spot. On
+   desktop an inline style overrides left/top/bottom so the panel follows the
+   trigger wherever it was dragged. On mobile the media query below wins and
+   the panel is a sheet regardless of where the trigger sits. */
 .fb-panel {
   position: fixed;
-  right: 16px;
-  bottom: 68px;                       /* FAB height + 8px gap */
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
   width: 380px;
   max-height: min(640px, 100dvh - 32px);
   pointer-events: auto;
@@ -112,9 +126,12 @@ button, input, textarea {
   animation: fb-rise 160ms ease-out;
 }
 
+/* Opacity only. The panel's transform carries its centring on the default
+   anchor, and an animation on the same property would fight it and snap on the
+   last frame. */
 @keyframes fb-rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .fb-titlebar { display: none; }
@@ -292,7 +309,7 @@ button, input, textarea {
 .fb-send {
   height: 38px;
   padding: 0 18px;
-  border: 1px solid var(--fb-accent);
+  border: 0;
   border-radius: 999px;
   background: var(--fb-accent);
   color: var(--fb-on-accent);
@@ -331,7 +348,9 @@ button, input, textarea {
   .fb-panel {
     right: 0;
     left: 0;
+    top: auto;
     bottom: 0;
+    transform: none;
     width: auto;
     max-height: min(88dvh, 100dvh - 24px);
     border-radius: 16px 16px 0 0;
