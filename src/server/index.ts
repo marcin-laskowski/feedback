@@ -58,14 +58,23 @@ function json(body: SubmitResponse, status: number): Response {
   return Response.json(body, { status });
 }
 
+/** Names of the required variables that are missing or empty. */
+function missingConfig(): string[] {
+  return (["FEEDBACK_SINK_URL", "FEEDBACK_SINK_TOKEN"] as const).filter(
+    (name) => !process.env[name]?.trim()
+  );
+}
+
 function config(): { url: string; token: string } | null {
-  const url = process.env.FEEDBACK_SINK_URL;
-  const token = process.env.FEEDBACK_SINK_TOKEN;
-  if (!url || !token) {
-    console.error("[feedback] FEEDBACK_SINK_URL / FEEDBACK_SINK_TOKEN not set");
+  const missing = missingConfig();
+  if (missing.length) {
+    console.error(`[feedback] not set: ${missing.join(", ")}`);
     return null;
   }
-  return { url, token };
+  return {
+    url: process.env.FEEDBACK_SINK_URL as string,
+    token: process.env.FEEDBACK_SINK_TOKEN as string,
+  };
 }
 
 /**
@@ -85,7 +94,14 @@ function config(): { url: string; token: string } | null {
 export async function GET(): Promise<Response> {
   const cfg = config();
   if (!cfg) {
-    return Response.json({ ok: false, warm: false, sink: "unconfigured" }, { status: 503 });
+    // Names, never values. Which variable is missing is the whole question when
+    // a deploy answers "unconfigured", and a health check that makes you guess
+    // between two candidates is half a health check. Variable names are not
+    // secrets — they are in the README.
+    return Response.json(
+      { ok: false, warm: false, sink: "unconfigured", missing: missingConfig() },
+      { status: 503 }
+    );
   }
 
   try {
