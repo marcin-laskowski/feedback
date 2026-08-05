@@ -24,7 +24,7 @@ import { strings } from "../shared/strings";
 import { validateReport, type RequiredField } from "../shared/validate";
 import { collectContext } from "./context";
 import { clearDraft, readDraft, writeDraft, type Draft } from "./draft";
-import { initNav } from "./nav";
+import { initNav, onLocationChange } from "./nav";
 import { read, write } from "./storage";
 import { useDraggable } from "./useDraggable";
 import { Panel, type PanelStatus } from "./Panel";
@@ -53,6 +53,8 @@ const PANEL_WIDTH = 380;
 /** Below this much space above the trigger, the panel opens downwards instead. */
 const PANEL_MIN_ABOVE = 320;
 const MOBILE_QUERY = "(max-width: 639px)";
+/** Must match --fb-exit in styles.ts — the panel unmounts when its exit ends. */
+const EXIT_MS = 150;
 
 const FOCUSABLE =
   'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -69,6 +71,35 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
 
   const [isMobile, setIsMobile] = useState(false);
 
+  /**
+   * The panel outlives `open` by one animation. Unmounting on close would make
+   * it vanish mid-air, which is the single cheapest-looking thing an overlay
+   * can do — arriving with motion and leaving without it reads as a bug.
+   */
+  const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = mounted;
+  }, [mounted]);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setClosing(false);
+      return;
+    }
+    if (!mountedRef.current) return;
+
+    setClosing(true);
+    const timer = setTimeout(() => {
+      setMounted(false);
+      setClosing(false);
+    }, EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   const panelRef = useRef<HTMLDivElement>(null);
   const pathnameRef = useRef<string>("");
   const warmedAt = useRef(0);
@@ -76,6 +107,12 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const drag = useDraggable(triggerRef);
+
+  /** Latest draft, readable from listeners that outlive a render. */
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   useEffect(() => {
     const query = window.matchMedia(MOBILE_QUERY);
@@ -86,22 +123,37 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   }, []);
 
   /**
-   * The panel follows the trigger. Anchored above it when there is room,
-   * flipped below when the trigger has been dragged near the top, and clamped
-   * so it never leaves the viewport. On mobile it stays a bottom sheet and the
-   * inline style is withheld — an inline value would beat the media query.
+   * The panel follows the trigger, docked to a corner rather than centred on
+   * it. Centring made the trigger float under the middle of the panel, which
+   * reads as two unrelated elements; sharing an edge reads as one.
+   *
+   * Which edge depends on which half of the screen the trigger was dragged to,
+   * so the panel always opens away from the nearest wall: trigger on the right
+   * → panels share their right edge, trigger on the left → their left. Same
+   * flip vertically when the trigger sits near the top. On mobile the panel is
+   * a sheet and the inline style is withheld — it would beat the media query.
    */
   const panelStyle = useMemo<CSSProperties | undefined>(() => {
     if (isMobile || !drag.pos) return undefined;
 
+    const anchorRight = drag.pos.x + drag.size.w / 2 > window.innerWidth / 2;
+    const openUp = drag.pos.y > PANEL_MIN_ABOVE;
+
+    const rawLeft = anchorRight ? drag.pos.x + drag.size.w - PANEL_WIDTH : drag.pos.x;
     const left = Math.min(
-      Math.max(8, drag.pos.x + drag.size.w / 2 - PANEL_WIDTH / 2),
+      Math.max(8, rawLeft),
       Math.max(8, window.innerWidth - PANEL_WIDTH - 8)
     );
 
-    return drag.pos.y > PANEL_MIN_ABOVE
-      ? { left, right: "auto", top: "auto", bottom: window.innerHeight - drag.pos.y + 8, transform: "none" }
-      : { left, right: "auto", bottom: "auto", top: drag.pos.y + drag.size.h + 8, transform: "none" };
+    // The panel scales out of the corner it shares with the trigger, so the
+    // motion reads as "this came from that button".
+    const transformOrigin = `${anchorRight ? "right" : "left"} ${openUp ? "bottom" : "top"}`;
+
+    const vertical: CSSProperties = openUp
+      ? { top: "auto", bottom: window.innerHeight - drag.pos.y + 8 }
+      : { bottom: "auto", top: drag.pos.y + drag.size.h + 8 };
+
+    return { left, right: "auto", ...vertical, transform: "none", transformOrigin };
   }, [isMobile, drag.pos, drag.size]);
 
   const openPanel = useCallback(() => {
@@ -162,6 +214,30 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
       // Fire and forget — a failed warm-up costs a slower submit, nothing else.
     });
   }, [open, endpoint]);
+
+  // --- navigating with the panel open --------------------------------------
+  /**
+   * The context is captured when the panel opens, so browsing on with the panel
+   * up left it describing the page you came from — a report filed against the
+   * wrong URL, which is the failure mode this widget exists to prevent.
+   *
+   * It re-reads only while the form is untouched. Once there is text in it, the
+   * report is ABOUT the page it was started on, and silently repointing it at
+   * wherever the reporter wandered to would be the same bug with extra steps.
+   */
+  useEffect(() => {
+    if (!open) return;
+    return onLocationChange(() => {
+      const dirty = draftRef.current.what.trim() || draftRef.current.why.trim();
+      if (dirty) return;
+
+      pathnameRef.current = window.location.pathname;
+      const saved = readDraft(pathnameRef.current);
+      setDraft(saved ?? EMPTY_DRAFT);
+      setRestored(Boolean(saved));
+      setContext(collectContext());
+    });
+  }, [open]);
 
   // --- live context --------------------------------------------------------
   // The strip lies the moment someone drags their window, which is exactly the
@@ -335,14 +411,23 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
 
   return (
     <>
-      {open && <div className="fb-backdrop" onClick={closePanel} aria-hidden="true" />}
+      {mounted && (
+        <div
+          className="fb-backdrop"
+          data-closing={closing ? "true" : "false"}
+          onClick={closePanel}
+          aria-hidden="true"
+        />
+      )}
 
-      {open && context && (
+      {mounted && context && (
         <div
           className="fb-panel"
           role="dialog"
           aria-modal="true"
           aria-label={strings.panelTitle}
+          aria-hidden={closing || undefined}
+          data-closing={closing ? "true" : "false"}
           ref={panelRef}
           style={panelStyle}
           onMouseEnter={holdSuccess}
@@ -388,6 +473,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
         data-open={open ? "true" : "false"}
         data-dragging={drag.dragging ? "true" : "false"}
         aria-expanded={open}
+        aria-label={fabLabel}
         onPointerDown={drag.onPointerDown}
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
@@ -399,7 +485,13 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
         }}
       >
         {open ? <CloseIcon /> : <FeedbackIcon />}
-        <span>{fabLabel}</span>
+        {/* The label stays mounted and collapses. Swapping the text would
+            change the pill's width in one frame; a collapsing grid column
+            animates it. `aria-label` above carries the real name, so the
+            clipped text never becomes the accessible one. */}
+        <span className="fb-fab__label">
+          <span>{strings.fab}</span>
+        </span>
       </button>
     </>
   );
