@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+
+  # The package ships source, so the only thing that can break a consumer at
+  # install time is the export map pointing at a file that does not exist.
+  exports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every export target resolves to a real file
+        run: |
+          node -e '
+            const pkg = require("./package.json");
+            const fs = require("fs");
+            const missing = Object.values(pkg.exports).filter((p) => !fs.existsSync(p));
+            if (missing.length) {
+              console.error("Missing export targets:", missing.join(", "));
+              process.exit(1);
+            }
+            console.log("All export targets resolve.");
+          '
