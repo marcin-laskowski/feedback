@@ -3,35 +3,48 @@
  *
  * Shadow DOM is what lets this be a flat token block with generic class names:
  * nothing here can reach the host page and nothing on the host page can reach
- * in. That is also why the widget does NOT inherit the host's design system —
- * it is a tool sitting on top of the site, not a section of it.
+ * in. The widget therefore carries its own copy of the Unhyped design system
+ * (unhyped.ai `tokens.css`: warm monochrome, sharp corners, no shadows, one
+ * ease) rather than inheriting the host's cascade. The one thing it does take
+ * from the host is the font variables `--font-geist` / `--font-geist-mono`,
+ * which custom properties carry across the shadow boundary - on unhyped.ai the
+ * widget renders in Geist, anywhere else it falls back to the system stack.
+ *
+ * Token names are role names, as in the site: ink / muted / faint for text,
+ * paper / tint for surfaces, hairline / hairline-2 for frames / separators.
  */
 
 export const CSS = `
 :host {
-  --fb-ink: #16181d;
-  --fb-ink-2: #6b7078;
-  --fb-surface: #ffffff;
-  --fb-surface-2: #f4f5f6;
-  --fb-line: rgba(22, 24, 29, 0.14);
-  --fb-line-2: rgba(22, 24, 29, 0.07);
-  /* Blue on purpose. The widget is a tool laid over somebody else's design
-     system, and reading as "not part of this site" is the point — a trigger
-     that blends in is a trigger nobody clicks. */
-  --fb-accent: #2563eb;
-  --fb-accent-strong: #1d4ed8;
-  --fb-on-accent: #ffffff;
-  --fb-danger: #b4291f;
-  --fb-radius: 12px;
-  /* Decelerating curve — fast off the mark, long settle. The thing that makes
-     an interface feel considered rather than snappy. */
-  --fb-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Leaving is not the mirror of arriving. Exits get out of the way. */
-  --fb-ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --fb-enter: 280ms;
-  --fb-exit: 150ms;
-  --fb-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --fb-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Text ladder - three steps (tokens.css). */
+  --fb-ink: #0f0f0f;
+  --fb-muted: #5a5855;
+  --fb-faint: #76716c;
+  /* Surfaces */
+  --fb-paper: #ffffff;
+  --fb-tint: #f7f5f2;
+  /* Lines: hairline = frames (panel, fields, chips), hairline-2 = separators. */
+  --fb-hairline: rgba(28, 26, 25, 0.12);
+  --fb-hairline-2: rgba(28, 26, 25, 0.07);
+  /* Sand - the wash (link hover) and the decorative line (link underline). */
+  --fb-sand-200: #e9e5e1;
+  --fb-sand-400: #b5ada5;
+  /* Primary action = ink on paper. No accent colour: the brand is monochrome
+     and the trigger stands out by being the one solid ink block on the page. */
+  --fb-primary: #0f0f0f;
+  --fb-primary-hover: #2b2927;
+  --fb-on-primary: #ffffff;
+  /* A hairline ring around the trigger so it keeps an edge on the site's dark
+     (ink) sections. Invisible on paper, present on ink. */
+  --fb-primary-ring: rgba(255, 255, 255, 0.16);
+  /* Dusty brick - errors, never decorative. */
+  --fb-alert: #8f3e3e;
+  /* Motion: one ease, two durations (tokens.css --ease-out / --dur-*). */
+  --fb-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fb-dur-fast: 180ms;
+  --fb-dur-base: 360ms;
+  --fb-font: var(--font-geist, system-ui, -apple-system, "Segoe UI", sans-serif);
+  --fb-mono: var(--font-geist-mono, ui-monospace, "SF Mono", Menlo, monospace);
 
   position: fixed;
   inset: 0;
@@ -39,20 +52,28 @@ export const CSS = `
   pointer-events: none;
   font-family: var(--fb-font);
   color: var(--fb-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark scheme = the site's dark tone: ink background, white on an alpha
+   scale, the primary button inverts to paper with ink text. */
 @media (prefers-color-scheme: dark) {
   :host {
-    --fb-ink: #eceef1;
-    --fb-ink-2: #9aa0a8;
-    --fb-surface: #1b1d22;
-    --fb-surface-2: #24272d;
-    --fb-line: rgba(236, 238, 241, 0.16);
-    --fb-line-2: rgba(236, 238, 241, 0.08);
-    --fb-accent: #3b82f6;
-    --fb-accent-strong: #2563eb;
-    --fb-on-accent: #ffffff;
-    --fb-danger: #ff8b80;
+    --fb-ink: rgba(255, 255, 255, 0.92);
+    --fb-muted: rgba(255, 255, 255, 0.72);
+    --fb-faint: rgba(255, 255, 255, 0.5);
+    --fb-paper: #1c1a19;
+    --fb-tint: rgba(255, 255, 255, 0.06);
+    --fb-hairline: rgba(255, 255, 255, 0.12);
+    --fb-hairline-2: rgba(255, 255, 255, 0.09);
+    --fb-sand-200: rgba(255, 255, 255, 0.1);
+    --fb-sand-400: rgba(255, 255, 255, 0.32);
+    --fb-primary: #ffffff;
+    --fb-primary-hover: rgba(255, 255, 255, 0.92);
+    --fb-on-primary: #0f0f0f;
+    --fb-primary-ring: rgba(28, 26, 25, 0.16);
+    --fb-alert: #d08c85;
   }
 }
 
@@ -64,152 +85,155 @@ button, input, textarea {
   margin: 0;
 }
 
+/* Focus reads the primary text colour (reset.css). */
 :focus-visible {
-  outline: 2px solid var(--fb-accent);
-  outline-offset: 2px;
+  outline: 2px solid var(--fb-ink);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
-/* The trigger is round and already sits on its own shadow, so a ring hugging
-   it at 2 px reads as part of the shape rather than as focus. Push it out. */
-.fb-fab:focus-visible { outline-offset: 4px; }
-
-/* Pointer users get no ring at all — Safari hands buttons :focus after a click,
-   which is where the stacked-rings look came from in the first place. */
+/* Pointer users get no ring at all - Safari hands buttons :focus after a
+   click, which is where a stacked-rings look came from in the first place. */
 .fb-fab:focus:not(:focus-visible) { outline: none; }
 
 /* ---------------------------------------------------------------- trigger */
 
-/* Position comes from inline style — the trigger is draggable and its place is
-   remembered per browser. Its size is measured at runtime rather than pinned
-   here, because the label swaps between "Zgłoś uwagę" and "Zamknij". */
+/* A tab on the right edge of the viewport, vertically centred - the Vercel
+   pattern. At rest it is a 40 px ink square holding the icon; on hover and on
+   keyboard focus the label slides out to the left. Sharp and flat like every
+   button on the site (contract 6), a touch taller than the site's 34 px
+   button because it floats over the page with no onboarding behind it.
+
+   'translate' centres it; 'transform' stays free for nothing - the trigger
+   never moves (hover contract). */
 .fb-fab {
   position: fixed;
-  height: 44px;
-  padding: 0 16px 0 13px;
+  right: 0;
+  top: 50%;
+  translate: 0 -50%;
+  height: 40px;
+  /* 11 + 16 icon + 11 + 2 border = 40, an exact square at rest. */
+  padding: 0 11px;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: var(--fb-accent);
-  color: var(--fb-on-accent);
+  border: 1px solid var(--fb-primary-ring);
+  border-right: 0;
+  border-radius: 0;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
   font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.005em;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1;
   white-space: nowrap;
-  cursor: grab;
-  /* Without this the browser claims the gesture for scrolling on touch and the
-     drag never starts. */
-  touch-action: none;
-  /* Restrained: enough separation from the page beneath, not a floating slab.
-     Static, never a hover lift. */
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.18);
+  cursor: pointer;
   transition:
-    background-color var(--fb-enter) var(--fb-ease-enter),
-    color var(--fb-enter) var(--fb-ease-enter),
-    padding var(--fb-enter) var(--fb-ease-enter),
-    box-shadow var(--fb-enter) var(--fb-ease-enter);
+    background-color var(--fb-dur-fast) var(--fb-ease),
+    color var(--fb-dur-fast) var(--fb-ease),
+    border-color var(--fb-dur-fast) var(--fb-ease);
 }
 
-.fb-fab:hover { background: var(--fb-accent-strong); }
-.fb-fab[data-dragging="true"] { cursor: grabbing; }
+/* Hover = background only (primary's contract). Nothing moves, nothing lifts. */
+.fb-fab:hover { background: var(--fb-primary-hover); }
 .fb-fab svg { display: block; flex: none; }
 
-/* Open: the pill collapses to a neutral circle holding an ✕. Secondary,
-   because once the panel is up the trigger is no longer the thing asking for
-   attention — the form is.
-
-   Tone carries that on its own. An earlier version also drew a hairline ring
-   inside the circle, which stacked with the focus outline into a bullseye —
-   two concentric rings around a cross. A filled shape needs one edge, not two. */
+/* Open: the tab drops to the secondary register (paper, hairline) and holds
+   an ✕. Once the panel is up the trigger is no longer the thing asking for
+   attention - the form is. Secondary hover = border only. */
 .fb-fab[data-open="true"] {
-  /* 14 + 16 icon + 14 = 44, so the pill collapses into an exact circle. */
-  padding: 0 14px;
-  background: var(--fb-surface-2);
+  background: var(--fb-paper);
+  border-color: var(--fb-hairline);
   color: var(--fb-ink);
 }
 
-.fb-fab[data-open="true"]:hover { background: var(--fb-line-2); }
+.fb-fab[data-open="true"]:hover { background: var(--fb-paper); border-color: var(--fb-ink); }
 
-/* The label collapses rather than disappearing. A grid column animating from
-   1fr to 0fr is the one way to transition intrinsic width, so the pill morphs
-   into the circle instead of snapping between two shapes.
+/* The label is a grid column animating from 0fr to 1fr - the one way to
+   transition an intrinsic width, so the square grows into a bar instead of
+   snapping between two shapes. The tab is pinned to the right edge, so the
+   growth happens leftwards, away from the wall.
 
    The gap between icon and text is a MARGIN on the collapsing element, not
-   padding on the text inside it. Padding inside a box that has been squeezed
-   to zero width cannot go below the padding itself, so it survived the
-   collapse as a stubborn 7 px on the right of the ✕ — which is what pushed the
-   circle off centre and out of line with the panel. */
+   padding on the text inside it: padding inside a box squeezed to zero width
+   cannot go below the padding itself and would survive the collapse. */
 .fb-fab__label {
   display: grid;
-  grid-template-columns: 1fr;
-  margin-left: 8px;
+  grid-template-columns: 0fr;
+  margin-left: 0;
+  opacity: 0;
   transition:
-    grid-template-columns var(--fb-enter) var(--fb-ease-enter),
-    margin-left var(--fb-enter) var(--fb-ease-enter),
-    opacity 160ms ease;
+    grid-template-columns var(--fb-dur-base) var(--fb-ease),
+    margin-left var(--fb-dur-base) var(--fb-ease),
+    opacity var(--fb-dur-fast) var(--fb-ease);
 }
 
 .fb-fab__label > span {
   overflow: hidden;
   white-space: nowrap;
+  /* Air after the text, inside the collapsing column so it vanishes with it. */
+  padding-right: 3px;
 }
 
-.fb-fab[data-open="true"] .fb-fab__label {
-  grid-template-columns: 0fr;
-  margin-left: 0;
-  opacity: 0;
+/* Anything revealed on hover also reveals on :focus-visible (a11y rule). */
+.fb-fab:hover .fb-fab__label,
+.fb-fab:focus-visible .fb-fab__label {
+  grid-template-columns: 1fr;
+  margin-left: 8px;
+  opacity: 1;
 }
 
 /* --------------------------------------------------------------- backdrop */
 
 /* Mobile only. On desktop the panel sits beside the page the user is
-   reviewing — dimming it would hide the thing they are reporting on. */
+   reviewing - dimming it would hide the thing they are reporting on. */
 .fb-backdrop { display: none; }
 
 /* ------------------------------------------------------------------ panel */
 
-/* Fallback anchoring, used only for the frame before the trigger has been
-   measured. On desktop an inline style overrides left/top/bottom so the panel
-   follows the trigger wherever it was dragged. On mobile the media query below
-   wins and the panel is a sheet regardless of where the trigger sits. */
+/* Anchored beside the tab: 40 px of trigger plus 16 px of air from the right
+   edge, centred on the same axis. On mobile the media query below wins and
+   the panel is a bottom sheet.
+
+   A card, not a floating slab: paper, one hairline frame, sharp corners, no
+   shadow (shadows are banned site-wide). 'translate' does the centring so the
+   enter/exit keyframes keep 'transform' to themselves. */
 .fb-panel {
   position: fixed;
-  right: 16px;
-  bottom: 70px;
+  right: 56px;
+  top: 50%;
+  translate: 0 -50%;
   transform: none;
   width: 380px;
   max-height: min(640px, 100dvh - 32px);
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  background: var(--fb-surface);
-  border: 1px solid var(--fb-line);
-  border-radius: var(--fb-radius);
+  background: var(--fb-paper);
+  border: 1px solid var(--fb-hairline);
+  border-radius: 0;
   overflow: hidden;
-  animation: fb-in var(--fb-enter) var(--fb-ease-enter);
+  animation: fb-in var(--fb-dur-base) var(--fb-ease);
 }
 
-/* Grows out of the corner it is docked to — transform-origin is set inline to
-   whichever corner the trigger sits at, so the panel always appears to come
-   from the button rather than from nowhere. The last keyframe is "none", which
-   is also what the inline transform is, so nothing snaps when the animation
-   hands back control. */
+/* Motion follows the site's one rule: from below, one ease, no scaling. The
+   last keyframe is "none", which is also what the inline transform is, so
+   nothing snaps when the animation hands back control. */
 @keyframes fb-in {
-  from { opacity: 0; transform: scale(0.94); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: none; }
 }
 
 /* Leaving is shorter and shallower than arriving. A panel that dismisses at
    the same pace it appeared feels reluctant. */
 .fb-panel[data-closing="true"] {
-  animation: fb-out var(--fb-exit) var(--fb-ease-exit) forwards;
+  animation: fb-out var(--fb-dur-fast) var(--fb-ease) forwards;
   pointer-events: none;
 }
 
 @keyframes fb-out {
   from { opacity: 1; transform: none; }
-  to   { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 0; transform: translateY(6px); }
 }
 
 .fb-titlebar { display: none; }
@@ -224,82 +248,72 @@ button, input, textarea {
   /* Without this the widget's scroll chains to the host page: on mobile the
      client's site scrolls away behind the sheet while they are mid-sentence. */
   overscroll-behavior: contain;
-  padding: 14px 16px 16px;
+  padding: 16px 20px 20px;
 }
 
-.fb-field + .fb-field { margin-top: 14px; }
+.fb-field + .fb-field { margin-top: 16px; }
 
+/* Label register = the contact form's (.lform__label): small, semibold, ink. */
 .fb-label {
   display: block;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
+/* Fields = the contact form's (.lform__input): sharp, hairline, ink on focus. */
 .fb-input {
   display: block;
   width: 100%;
   min-height: 72px;
-  padding: 9px 10px;
-  border: 1px solid var(--fb-line);
-  border-radius: 8px;
-  background: var(--fb-surface);
+  padding: 10px 12px;
+  border: 1px solid var(--fb-hairline);
+  border-radius: 0;
+  background: var(--fb-paper);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
   resize: none;
-  transition: border-color 140ms ease;
+  transition: border-color var(--fb-dur-fast) var(--fb-ease);
 }
 
-.fb-input::placeholder { color: var(--fb-ink-2); }
-.fb-input:focus { border-color: var(--fb-accent); }
-.fb-input[aria-invalid="true"] { border-color: var(--fb-danger); }
+.fb-input::placeholder { color: var(--fb-faint); }
+.fb-input:focus { outline: none; border-color: var(--fb-ink); }
+.fb-input[aria-invalid="true"], .fb-input[aria-invalid="true"]:focus { border-color: var(--fb-alert); }
 
-.fb-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.fb-pill {
-  padding: 5px 11px;
-  border: 1px solid var(--fb-line);
-  border-radius: 999px;
-  background: transparent;
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
-}
-
-.fb-pill:hover { border-color: var(--fb-accent); }
-
-.fb-pill[aria-pressed="true"] {
-  background: var(--fb-accent);
-  border-color: var(--fb-accent);
-  color: var(--fb-on-accent);
-}
+/* The single-line variant (the reporter's name): same frame, no textarea floor. */
+.fb-input--line { min-height: 0; }
 
 /* ------------------------------------------------------------------ strip */
 
+/* The tinted band under the head: quiet fill (--surface-tint), a separator
+   below. Mono is the site's label register, so the captured context reads as
+   what it is - data, not prose. */
 .fb-strip {
-  border-bottom: 1px solid var(--fb-line-2);
-  background: var(--fb-surface-2);
+  border-bottom: 1px solid var(--fb-hairline-2);
+  background: var(--fb-tint);
 }
 
 .fb-strip__toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 9px 16px;
+  padding: 10px 20px;
   border: 0;
   background: transparent;
   font-family: var(--fb-mono);
   font-size: 12px;
-  color: var(--fb-ink-2);
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--fb-muted);
   text-align: left;
   cursor: pointer;
+  transition: color var(--fb-dur-fast) var(--fb-ease);
 }
+
+.fb-strip__toggle:hover { color: var(--fb-ink); }
 
 .fb-strip__summary {
   overflow: hidden;
@@ -307,26 +321,36 @@ button, input, textarea {
   white-space: nowrap;
 }
 
-.fb-strip__chevron { transition: transform 140ms ease; }
+.fb-strip__chevron {
+  flex: none;
+  display: block;
+  color: var(--fb-faint);
+  transition: transform var(--fb-dur-base) var(--fb-ease);
+}
 .fb-strip__toggle[aria-expanded="true"] .fb-strip__chevron { transform: rotate(180deg); }
 
 .fb-strip__detail {
-  padding: 0 16px 12px;
-  font-family: var(--fb-mono);
-  font-size: 12px;
-  color: var(--fb-ink-2);
+  padding: 2px 20px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fb-ink);
 }
 
 .fb-strip__row {
   display: flex;
-  gap: 10px;
-  padding: 2px 0;
+  align-items: baseline;
+  gap: 12px;
+  padding: 3px 0;
 }
 
+/* Keys in the eyebrow register (.card__eyebrow): mono, caps, tracked, muted. */
 .fb-strip__key {
   flex: 0 0 96px;
-  color: var(--fb-ink-2);
-  opacity: 0.75;
+  font-family: var(--fb-mono);
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--fb-muted);
 }
 
 .fb-strip__value {
@@ -335,32 +359,41 @@ button, input, textarea {
   overflow-wrap: anywhere;
 }
 
+/* The one privacy line, in the note register (.lform__note): tiny, muted. */
 .fb-strip__foot {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--fb-line-2);
+  border-top: 1px solid var(--fb-hairline-2);
+  font-size: 12px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--fb-muted);
 }
 
 /* ------------------------------------------------------------------ notes */
 
+/* Notes are lines of text, not boxes (.lform__hint / .lform__error). */
 .fb-note {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: var(--fb-surface-2);
-  font-size: 13px;
-  color: var(--fb-ink-2);
+  margin-bottom: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--fb-muted);
 }
 
 .fb-note--error {
-  background: transparent;
-  border: 1px solid var(--fb-danger);
-  color: var(--fb-danger);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: var(--fb-alert);
 }
 
+/* The site's one link contract: quiet sand underline at rest, ink underline
+   and a sand wash on hover. */
 .fb-textbutton {
   border: 0;
   padding: 0;
@@ -368,8 +401,18 @@ button, input, textarea {
   font-size: inherit;
   color: var(--fb-ink);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-color: var(--fb-sand-400);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
   cursor: pointer;
+  transition:
+    background-color var(--fb-dur-fast) var(--fb-ease),
+    text-decoration-color var(--fb-dur-fast) var(--fb-ease);
+}
+
+.fb-textbutton:hover {
+  text-decoration-color: var(--fb-ink);
+  background: var(--fb-sand-200);
 }
 
 /* ----------------------------------------------------------------- footer */
@@ -378,37 +421,113 @@ button, input, textarea {
   position: sticky;
   bottom: 0;
   display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid var(--fb-line);
-  background: var(--fb-surface);
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--fb-hairline-2);
+  background: var(--fb-paper);
 }
 
+/* The primary button (.btn--primary): sharp, ink, static label. Hover is the
+   background plus the arrow swap - primary's only animation. */
 .fb-send {
-  height: 38px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--fb-accent);
-  color: var(--fb-on-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: var(--fb-primary);
+  color: var(--fb-on-primary);
   font-size: 14px;
-  font-weight: 500;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
   cursor: pointer;
-  transition: opacity 140ms ease;
+  transition: background-color var(--fb-dur-fast) var(--fb-ease);
 }
 
-.fb-send[disabled] { opacity: 0.45; cursor: default; }
+.fb-send:hover { background: var(--fb-primary-hover); }
+.fb-send[disabled] { opacity: 0.4; pointer-events: none; }
+
+/* Arrow swap inside a clipped 1em window: on hover the first arrow slides out
+   to the right, the second slides in from the left (components.css .btn__arrow). */
+.fb-send__arrow {
+  display: inline-block;
+  overflow: hidden;
+  width: 1em;
+  height: 1em;
+  line-height: 0;
+}
+
+.fb-send__track {
+  display: flex;
+  width: 2em;
+  transform: translateX(-50%);
+  transition: transform var(--fb-dur-base) var(--fb-ease);
+  will-change: transform;
+}
+
+.fb-send__track svg {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  transition: opacity var(--fb-dur-base) var(--fb-ease);
+}
+
+/* The parked glyph is also transparent, not just clipped: at a fractional x
+   the clip edge lets a pixel of the round line cap through, which read as a
+   stray dot after the arrow. */
+.fb-send__track svg:first-child { opacity: 0; }
+.fb-send:hover .fb-send__track { transform: translateX(0); }
+.fb-send:hover .fb-send__track svg:first-child { opacity: 1; }
+.fb-send:hover .fb-send__track svg:last-child { opacity: 0; }
 
 /* ---------------------------------------------------------------- success */
 
+/* Success replaces the form - calm and concrete (.lform__done). */
 .fb-success {
-  padding: 28px 16px 32px;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 0 8px;
 }
 
-.fb-success__title { font-size: 15px; font-weight: 600; }
-.fb-success__body { margin-top: 4px; font-size: 13px; color: var(--fb-ink-2); }
-.fb-success__again { margin-top: 14px; }
+.fb-success__mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--fb-hairline);
+  border-radius: 50%;
+  color: var(--fb-ink);
+}
+
+.fb-success__mark svg { display: block; }
+
+.fb-success__title {
+  margin-top: 16px;
+  font-size: 18px;
+  line-height: 1.26;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.fb-success__body {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fb-muted);
+}
+
+.fb-success__again {
+  margin-top: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 /* ----------------------------------------------------------------- mobile */
 
@@ -418,12 +537,12 @@ button, input, textarea {
     position: fixed;
     inset: 0;
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.32);
-    animation: fb-fade var(--fb-enter) var(--fb-ease-enter);
+    background: rgba(15, 15, 15, 0.4);
+    animation: fb-fade var(--fb-dur-base) var(--fb-ease);
   }
 
   .fb-backdrop[data-closing="true"] {
-    animation: fb-fade var(--fb-exit) var(--fb-ease-exit) reverse forwards;
+    animation: fb-fade var(--fb-dur-fast) var(--fb-ease) reverse forwards;
     pointer-events: none;
   }
 
@@ -434,44 +553,46 @@ button, input, textarea {
 
   .fb-fab[data-open="true"] { display: none; }
 
+  /* The sheet keeps the sharp corners - a rounded top would be the one curve
+     in the whole system. */
   .fb-panel {
     right: 0;
     left: 0;
     top: auto;
     bottom: 0;
+    translate: none;
     transform: none;
     width: auto;
     max-height: min(88dvh, 100dvh - 24px);
-    border-radius: 16px 16px 0 0;
+    border-left: 0;
+    border-right: 0;
     border-bottom: 0;
-    animation: fb-sheet-in var(--fb-enter) var(--fb-ease-enter);
+    animation: fb-sheet-in var(--fb-dur-base) var(--fb-ease);
   }
 
   .fb-panel[data-closing="true"] {
-    animation: fb-sheet-out var(--fb-exit) var(--fb-ease-exit) forwards;
+    animation: fb-sheet-out var(--fb-dur-fast) var(--fb-ease) forwards;
   }
 
-  /* The sheet slides, it does not scale — on a bottom sheet the edge of the
-     screen is the origin, and scaling from it looks like a mistake. */
   @keyframes fb-sheet-in {
-    from { opacity: 0; transform: translateY(18px); }
+    from { opacity: 0; transform: translateY(24px); }
     to   { opacity: 1; transform: none; }
   }
 
   @keyframes fb-sheet-out {
     from { opacity: 1; transform: none; }
-    to   { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 0; transform: translateY(12px); }
   }
 
-  /* The sheet covers the FAB, so it needs its own way out (D21). The handle is
-     decorative — the close button is the one that is keyboard-reachable. */
+  /* The sheet covers the trigger, so it needs its own way out (D21). The
+     handle is decorative - the close button is the one that is
+     keyboard-reachable. A sand line, not a rounded pill. */
   .fb-handle {
     display: block;
-    width: 36px;
-    height: 4px;
-    margin: 8px auto 0;
-    border-radius: 999px;
-    background: var(--fb-line);
+    width: 32px;
+    height: 2px;
+    margin: 10px auto 0;
+    background: var(--fb-sand-400);
   }
 
   .fb-titlebar {
@@ -479,12 +600,13 @@ button, input, textarea {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 10px 12px 10px 16px;
-    border-bottom: 1px solid var(--fb-line-2);
+    padding: 10px 12px 10px 20px;
+    border-bottom: 1px solid var(--fb-hairline-2);
   }
 
-  .fb-titlebar__title { font-size: 14px; font-weight: 600; }
+  .fb-titlebar__title { font-size: 14px; line-height: 1.5; font-weight: 600; }
 
+  /* Ghost button: background only on hover. */
   .fb-close {
     display: inline-flex;
     align-items: center;
@@ -492,17 +614,21 @@ button, input, textarea {
     width: 34px;
     height: 34px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 0;
     background: transparent;
+    color: var(--fb-ink);
     cursor: pointer;
+    transition: background-color var(--fb-dur-fast) var(--fb-ease);
   }
+
+  .fb-close:hover { background: var(--fb-tint); }
 }
 
-/* Reduced motion keeps the fades — they carry the state change — and drops
+/* Reduced motion keeps the fades - they carry the state change - and drops
    everything that moves or resizes. The label stops collapsing and simply
    goes, which is the one place the two modes look different. */
 @media (prefers-reduced-motion: reduce) {
-  :root, :host { --fb-enter: 120ms; --fb-exit: 100ms; }
+  :host { --fb-dur-fast: 100ms; --fb-dur-base: 120ms; }
 
   .fb-panel,
   .fb-panel[data-closing="true"] {
@@ -516,7 +642,7 @@ button, input, textarea {
 
   .fb-panel[data-closing="true"] { animation-direction: reverse; }
 
-  .fb-fab, .fb-pill, .fb-input, .fb-send, .fb-strip__chevron { transition: none; }
+  .fb-fab, .fb-input, .fb-send, .fb-send__track, .fb-strip__chevron, .fb-textbutton { transition: none; }
   .fb-fab__label { transition: none; }
 }
 `;

@@ -16,6 +16,7 @@
 
 import {
   MAX_BODY_BYTES,
+  MAX_REPORTER,
   MAX_TEXT,
   SCHEMA_VERSION,
   type FeedbackSubmission,
@@ -32,8 +33,8 @@ const SINK_TIMEOUT_MS = 14_000;
 const WARMUP_TIMEOUT_MS = 3_000;
 
 /**
- * Rate limit per IP, sliding window, in memory. A review session is bursty —
- * one person walking a site files a dozen reports in an hour — so the ceiling
+ * Rate limit per IP, sliding window, in memory. A review session is bursty -
+ * one person walking a site files a dozen reports in an hour - so the ceiling
  * is high. It exists to stop a loop, not to ration honest use. Best-effort on
  * serverless: the window is per instance.
  */
@@ -80,7 +81,7 @@ function config(): { url: string; token: string } | null {
 /**
  * Warm-up ping, and the only health check this system has.
  *
- * Apps Script cold start is 1–3 s and is the entire p95 budget now that there
+ * Apps Script cold start is 1-3 s and is the entire p95 budget now that there
  * is no second latency mitigation left. The widget fires this when the panel
  * opens and ignores the answer; by the time the user has typed two sentences
  * the container is awake.
@@ -88,7 +89,7 @@ function config(): { url: string; token: string } | null {
  * It reports on the sink rather than on itself, which costs one body read and
  * buys the one thing worth having here: `curl /api/feedback` tells you whether
  * the sink is actually configured. An earlier version returned `{ ok: true }`
- * as long as the fetch resolved — including when Google answered 403 with a
+ * as long as the fetch resolved - including when Google answered 403 with a
  * login page, which is exactly the failure this endpoint should surface.
  */
 export async function GET(): Promise<Response> {
@@ -97,7 +98,7 @@ export async function GET(): Promise<Response> {
     // Names, never values. Which variable is missing is the whole question when
     // a deploy answers "unconfigured", and a health check that makes you guess
     // between two candidates is half a health check. Variable names are not
-    // secrets — they are in the README.
+    // secrets - they are in the README.
     return Response.json(
       { ok: false, warm: false, sink: "unconfigured", missing: missingConfig() },
       { status: 503 }
@@ -115,7 +116,7 @@ export async function GET(): Promise<Response> {
     // The sink answers JSON. HTML means Google answered instead of the script.
     if (!res.ok || !body.trimStart().startsWith("{")) {
       console.error(
-        `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} — ` +
+        `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} - ` +
           `check that the Apps Script deployment is a Web app with access "Anyone", ` +
           `and that FEEDBACK_SINK_URL ends in /exec`
       );
@@ -166,7 +167,7 @@ export async function POST(req: Request): Promise<Response> {
   const ctx = body.context ?? ({} as FeedbackSubmission["context"]);
 
   // The client's UA parse is what it RENDERED. What we store is what we derive
-  // from the raw string ourselves (D18) — the two are the same function, but
+  // from the raw string ourselves (D18) - the two are the same function, but
   // only one of them is trustworthy.
   const parsed = parseUserAgent(String(ctx.userAgent ?? req.headers.get("user-agent") ?? ""));
 
@@ -177,12 +178,13 @@ export async function POST(req: Request): Promise<Response> {
     environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
     country: req.headers.get("x-vercel-ip-country") ?? "",
 
-    // Validated above — the casts are safe and keep the sink payload typed.
+    // Validated above - the casts are safe and keep the sink payload typed.
     type: body.type as FeedbackSubmission["type"],
     severity: body.severity as FeedbackSubmission["severity"],
     what: clip(body.what, MAX_TEXT),
     why: clip(body.why, MAX_TEXT),
     how: clip(body.how, MAX_TEXT),
+    reporter: clip(body.reporter, MAX_REPORTER),
 
     context: {
       pathname: clip(ctx.pathname, 500),
@@ -224,7 +226,7 @@ export async function POST(req: Request): Promise<Response> {
 
     // Read as text first. When the deployment is misconfigured Google answers
     // with an HTML login page, and `res.json()` throws a parse error that says
-    // nothing about the actual problem — which is a deploy setting, not JSON.
+    // nothing about the actual problem - which is a deploy setting, not JSON.
     const body = await res.text();
     try {
       result = JSON.parse(body) as SinkResponse;
@@ -241,7 +243,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (!result.ok) {
-    // `unauthorized` here means OUR token is wrong — a deploy problem, not a
+    // `unauthorized` here means OUR token is wrong - a deploy problem, not a
     // user problem. Log it loudly; the user just sees "try again".
     console.error("[feedback] sink rejected:", result.error, result.fields ?? "");
     if (result.error === "validation") {

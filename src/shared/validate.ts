@@ -1,7 +1,7 @@
 /**
  * One validator, two callers. The client runs it before enabling send so the
  * user gets a highlighted field; the server runs it so a crafted request can't
- * skip it. Both must agree with the sink — Code.gs rejects any of
+ * skip it. Both must agree with the sink - Code.gs rejects any of
  * type/severity/what/why shorter than 3 characters after trim, and a mismatch
  * here means the user sees a server error instead of a field error.
  */
@@ -15,11 +15,18 @@ import {
   type FeedbackType,
 } from "./types";
 
-/** Fields the sink requires. `how` is optional by design. */
-export const REQUIRED_FIELDS = ["type", "severity", "what", "why"] as const;
+/**
+ * Fields a report must carry. `how` is optional by design. `reporter` is
+ * required here but not by the sink, which keeps accepting rows from older
+ * widgets - stricter on our side is safe, stricter on the sink's side is the
+ * mismatch that turns a field error into a server error.
+ */
+export const REQUIRED_FIELDS = ["type", "severity", "what", "why", "reporter"] as const;
 export type RequiredField = (typeof REQUIRED_FIELDS)[number];
 
 const MIN_LENGTH = 3;
+/** A name can be two letters. */
+const MIN_REPORTER_LENGTH = 2;
 
 export function isFeedbackType(value: unknown): value is FeedbackType {
   return typeof value === "string" && (FEEDBACK_TYPES as readonly string[]).includes(value);
@@ -40,12 +47,13 @@ export function validateReport(input: Partial<FeedbackSubmission>): RequiredFiel
   if (!isFeedbackSeverity(input.severity)) invalid.push("severity");
   if (!hasMinText(input.what)) invalid.push("what");
   if (!hasMinText(input.why)) invalid.push("why");
+  if (!hasMinText(input.reporter, MIN_REPORTER_LENGTH)) invalid.push("reporter");
 
   return invalid;
 }
 
-function hasMinText(value: unknown): boolean {
-  return typeof value === "string" && value.trim().length >= MIN_LENGTH;
+function hasMinText(value: unknown, min: number = MIN_LENGTH): boolean {
+  return typeof value === "string" && value.trim().length >= min;
 }
 
 /** Collapses newlines out of single-line values and clips to the sink's limit. */

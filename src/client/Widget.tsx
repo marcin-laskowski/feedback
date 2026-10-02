@@ -11,13 +11,13 @@
  *                                                                 └─4xx/5xx▶ Failed
  *
  * There is deliberately no ConfirmDiscard state. The plan had one, but once
- * the draft persists (D17) closing loses nothing — the confirm dialog asked
+ * the draft persists (D17) closing loses nothing - the confirm dialog asked
  * permission for something that no longer happens, and a modal inside a modal
  * is the worst focus-trap surface in the widget. The restore line's
  * "Zacznij od nowa" is the discard.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SCHEMA_VERSION, type FeedbackContext, type SubmitResponse } from "../shared/types";
 import { stripDeepLinkParam } from "../shared/redact";
 import { strings } from "../shared/strings";
@@ -26,7 +26,6 @@ import { collectContext } from "./context";
 import { clearDraft, readDraft, writeDraft, type Draft } from "./draft";
 import { initNav, onLocationChange } from "./nav";
 import { read, write } from "./storage";
-import { useDraggable } from "./useDraggable";
 import { Panel, type PanelStatus } from "./Panel";
 
 export type Reveal = "always" | "invited";
@@ -39,6 +38,8 @@ type Props = {
 };
 
 const INVITED_KEY = "fb.invited";
+/** The reporter's name, remembered per browser so it is typed once. */
+const REPORTER_KEY = "fb.reporter";
 const DEEP_LINK_PARAM = "feedback";
 const SUBMIT_TIMEOUT_MS = 15_000;
 const DRAFT_DEBOUNCE_MS = 400;
@@ -46,15 +47,15 @@ const RESIZE_DEBOUNCE_MS = 200;
 const SUCCESS_CLOSE_MS = 4_000;
 const WARMUP_COOLDOWN_MS = 60_000;
 
+/**
+ * Type and severity are no longer asked for in the form - the questions that
+ * matter are what, why and who - but the sink still requires both fields
+ * (additive-only contract), so every report carries these two constants.
+ */
 const EMPTY_DRAFT: Draft = { type: "bug", severity: "annoying", what: "", why: "" };
 
-/** Panel width on desktop. Keep in sync with `.fb-panel` in styles.ts. */
-const PANEL_WIDTH = 380;
-/** Below this much space above the trigger, the panel opens downwards instead. */
-const PANEL_MIN_ABOVE = 320;
-const MOBILE_QUERY = "(max-width: 639px)";
-/** Must match --fb-exit in styles.ts — the panel unmounts when its exit ends. */
-const EXIT_MS = 150;
+/** Must match --fb-dur-fast in styles.ts - the panel unmounts when its exit ends. */
+const EXIT_MS = 180;
 
 const FOCUSABLE =
   'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -64,17 +65,17 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   const [invited, setInvited] = useState(reveal === "always");
   const [status, setStatus] = useState<PanelStatus>("idle");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  /** Not part of the draft: the draft is per page, the reporter is per person. */
+  const [reporter, setReporter] = useState("");
   const [invalid, setInvalid] = useState<RequiredField[]>([]);
   const [restored, setRestored] = useState(false);
   const [stripExpanded, setStripExpanded] = useState(false);
   const [context, setContext] = useState<FeedbackContext | null>(null);
 
-  const [isMobile, setIsMobile] = useState(false);
-
   /**
    * The panel outlives `open` by one animation. Unmounting on close would make
    * it vanish mid-air, which is the single cheapest-looking thing an overlay
-   * can do — arriving with motion and leaving without it reads as a bug.
+   * can do - arriving with motion and leaving without it reads as a bug.
    */
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -105,56 +106,11 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   const warmedAt = useRef(0);
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const drag = useDraggable(triggerRef);
-
   /** Latest draft, readable from listeners that outlive a render. */
   const draftRef = useRef(draft);
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
-
-  useEffect(() => {
-    const query = window.matchMedia(MOBILE_QUERY);
-    const update = () => setIsMobile(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-
-  /**
-   * The panel follows the trigger, docked to a corner rather than centred on
-   * it. Centring made the trigger float under the middle of the panel, which
-   * reads as two unrelated elements; sharing an edge reads as one.
-   *
-   * Which edge depends on which half of the screen the trigger was dragged to,
-   * so the panel always opens away from the nearest wall: trigger on the right
-   * → panels share their right edge, trigger on the left → their left. Same
-   * flip vertically when the trigger sits near the top. On mobile the panel is
-   * a sheet and the inline style is withheld — it would beat the media query.
-   */
-  const panelStyle = useMemo<CSSProperties | undefined>(() => {
-    if (isMobile || !drag.pos) return undefined;
-
-    const anchorRight = drag.pos.x + drag.size.w / 2 > window.innerWidth / 2;
-    const openUp = drag.pos.y > PANEL_MIN_ABOVE;
-
-    const rawLeft = anchorRight ? drag.pos.x + drag.size.w - PANEL_WIDTH : drag.pos.x;
-    const left = Math.min(
-      Math.max(8, rawLeft),
-      Math.max(8, window.innerWidth - PANEL_WIDTH - 8)
-    );
-
-    // The panel scales out of the corner it shares with the trigger, so the
-    // motion reads as "this came from that button".
-    const transformOrigin = `${anchorRight ? "right" : "left"} ${openUp ? "bottom" : "top"}`;
-
-    const vertical: CSSProperties = openUp
-      ? { top: "auto", bottom: window.innerHeight - drag.pos.y + 8 }
-      : { bottom: "auto", top: drag.pos.y + drag.size.h + 8 };
-
-    return { left, right: "auto", ...vertical, transform: "none", transformOrigin };
-  }, [isMobile, drag.pos, drag.size]);
 
   const openPanel = useCallback(() => {
     pathnameRef.current = window.location.pathname;
@@ -178,6 +134,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   // (D19), so the URL is read straight off `window.location`.
   useEffect(() => {
     initNav();
+    setReporter(read("local", REPORTER_KEY) ?? "");
     if (reveal === "invited" && read("local", INVITED_KEY) === "1") setInvited(true);
 
     const check = () => {
@@ -202,7 +159,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   }, [openPanel, reveal]);
 
   // --- warm-up -------------------------------------------------------------
-  // Apps Script cold start is 1–3 s and, with the retry queue gone, it is the
+  // Apps Script cold start is 1-3 s and, with the retry queue gone, it is the
   // whole p95 budget. The ping goes to OUR route, not to the sink: the sink's
   // URL and token are server-side only.
   useEffect(() => {
@@ -211,14 +168,14 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
     if (now - warmedAt.current < WARMUP_COOLDOWN_MS) return;
     warmedAt.current = now;
     fetch(endpoint, { method: "GET" }).catch(() => {
-      // Fire and forget — a failed warm-up costs a slower submit, nothing else.
+      // Fire and forget - a failed warm-up costs a slower submit, nothing else.
     });
   }, [open, endpoint]);
 
   // --- navigating with the panel open --------------------------------------
   /**
    * The context is captured when the panel opens, so browsing on with the panel
-   * up left it describing the page you came from — a report filed against the
+   * up left it describing the page you came from - a report filed against the
    * wrong URL, which is the failure mode this widget exists to prevent.
    *
    * It re-reads only while the form is untouched. Once there is text in it, the
@@ -304,7 +261,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, status, closePanel, shadowRoot]);
 
-  // Focus the first field, not the close button — the panel exists to be typed in.
+  // Focus the first field, not the close button - the panel exists to be typed in.
   useEffect(() => {
     if (!open || status !== "idle") return;
     const field = panelRef.current?.querySelector<HTMLTextAreaElement>("#fb-what");
@@ -335,7 +292,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   const submit = useCallback(async () => {
     if (status === "submitting") return;
 
-    const problems = validateReport(draft);
+    const problems = validateReport({ ...draft, reporter });
     if (problems.length) {
       setInvalid(problems);
       return;
@@ -359,6 +316,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
           severity: draft.severity,
           what: draft.what,
           why: draft.why,
+          reporter: reporter.trim(),
           context: collectContext(),
         }),
       });
@@ -375,18 +333,24 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
       // "Zgłoś kolejną rzecz" repopulates the form with the report that was
       // just sent, which is the worst version of this bug.
       clearDraft(pathnameRef.current);
+      write("local", REPORTER_KEY, reporter.trim());
       setStatus("success");
     } catch {
       setStatus("failed");
     } finally {
       clearTimeout(timeout);
     }
-  }, [draft, endpoint, project, status]);
+  }, [draft, reporter, endpoint, project, status]);
 
   const onChange = useCallback((patch: Partial<Draft>) => {
     setRestored(false);
     setInvalid([]);
     setDraft((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const onReporterChange = useCallback((value: string) => {
+    setInvalid([]);
+    setReporter(value);
   }, []);
 
   const discardDraft = useCallback(() => {
@@ -429,19 +393,20 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
           aria-hidden={closing || undefined}
           data-closing={closing ? "true" : "false"}
           ref={panelRef}
-          style={panelStyle}
           onMouseEnter={holdSuccess}
           onFocusCapture={holdSuccess}
         >
           <Panel
             context={context}
             draft={draft}
+            reporter={reporter}
             status={status}
             invalid={invalid}
             restored={restored}
             stripExpanded={stripExpanded}
             onToggleStrip={() => setStripExpanded((v) => !v)}
             onChange={onChange}
+            onReporterChange={onReporterChange}
             onDiscardDraft={discardDraft}
             onSubmit={() => void submit()}
             onClose={closePanel}
@@ -450,47 +415,25 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
         </div>
       )}
 
-      {/* Icon plus label: an unlabelled circle is a guessing game on a site
-          nobody has been briefed about. On desktop it doubles as the close
-          control (the panel is anchored 8 px away); on mobile the sheet covers
-          it, so CSS hides it and the title bar's close button takes over (D21).
-
-          A drag that ends is not a click: `consumedByDrag` swallows the release
-          that moved the trigger, or every reposition would also open the panel.
-
-          `visibility` rather than a conditional render — the element has to be
-          in the DOM to be measured, and its measured width is what the default
-          position and the panel's anchor are derived from. */}
+      {/* A tab on the right edge of the viewport, vertically centred: an icon
+          at rest, the label slides out to the left on hover and on keyboard
+          focus. On desktop it doubles as the close control (the panel is
+          anchored beside it); on mobile the sheet covers it, so CSS hides it
+          and the title bar's close button takes over (D21). */}
       <button
         type="button"
         className="fb-fab"
-        ref={triggerRef}
-        style={
-          drag.pos
-            ? { left: drag.pos.x, top: drag.pos.y }
-            : { left: 0, top: 0, visibility: "hidden" }
-        }
         data-open={open ? "true" : "false"}
-        data-dragging={drag.dragging ? "true" : "false"}
         aria-expanded={open}
         aria-label={fabLabel}
-        onPointerDown={drag.onPointerDown}
-        onPointerMove={drag.onPointerMove}
-        onPointerUp={drag.onPointerUp}
-        onPointerCancel={drag.onPointerUp}
-        onClick={() => {
-          if (drag.consumedByDrag()) return;
-          if (open) closePanel();
-          else openPanel();
-        }}
+        onClick={() => (open ? closePanel() : openPanel())}
       >
         {open ? <CloseIcon /> : <FeedbackIcon />}
-        {/* The label stays mounted and collapses. Swapping the text would
-            change the pill's width in one frame; a collapsing grid column
-            animates it. `aria-label` above carries the real name, so the
-            clipped text never becomes the accessible one. */}
+        {/* The label stays mounted and collapses to a zero-width grid column;
+            `aria-label` above carries the accessible name, so the clipped text
+            never becomes it. */}
         <span className="fb-fab__label">
-          <span>{strings.fab}</span>
+          <span>{fabLabel}</span>
         </span>
       </button>
     </>
@@ -505,7 +448,7 @@ function FeedbackIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -524,7 +467,7 @@ function CloseIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       aria-hidden="true"
       focusable="false"

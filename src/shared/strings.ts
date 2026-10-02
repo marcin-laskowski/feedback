@@ -3,7 +3,7 @@
  *
  * Polish is the default because every consumer today is a Polish site. When a
  * project needs another language, this file grows a second object and the
- * widget takes a `strings` prop — not scattered literals across five
+ * widget takes a `strings` prop - not scattered literals across five
  * components.
  */
 
@@ -16,7 +16,7 @@ export const strings = {
   panelTitle: "Zgłoś uwagę",
   close: "Zamknij",
 
-  // Context strip — a disclosure, not a summary. Everything stored is visible
+  // Context strip - a disclosure, not a summary. Everything stored is visible
   // here, which is what makes the transparency claim true rather than decorative.
   stripShow: "Pokaż, co zbieramy",
   stripHide: "Ukryj szczegóły",
@@ -40,10 +40,15 @@ export const strings = {
   whyLabel: "Dlaczego to problem?",
   whyPlaceholder: "Nie mogę pokazać oferty klientowi na jutrzejszym spotkaniu.",
 
+  // Asked third, after the report itself: the reporter came to say what is
+  // broken, and a form that opens with "who are you" reads as a login.
+  reporterLabel: "Kto zgłasza?",
+  reporterPlaceholder: "Imię i nazwisko",
+
   send: "Wyślij",
   sending: "Wysyłam…",
 
-  // Draft restore. An orientation cue, not a banner — it disappears on the
+  // Draft restore. An orientation cue, not a banner - it disappears on the
   // first keystroke. Without it, a form that fills itself reads as a form that
   // was already submitted.
   draftRestored: "Wróciliśmy do Twojego szkicu",
@@ -53,7 +58,7 @@ export const strings = {
   successBody: "Zgłoszenie trafiło na listę.",
   successAgain: "Zgłoś kolejną rzecz",
 
-  errorSend: "Nie udało się wysłać. Twój tekst jest zapisany — spróbuj jeszcze raz.",
+  errorSend: "Nie udało się wysłać. Twój tekst jest zapisany - spróbuj jeszcze raz.",
   errorRateLimited: "Za dużo zgłoszeń z tego adresu. Spróbuj za chwilę.",
   errorValidation: "Uzupełnij zaznaczone pola.",
 } as const;
