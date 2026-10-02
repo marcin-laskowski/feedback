@@ -1,6 +1,6 @@
 {
   "name": "@unhyped/feedback",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "In-page feedback widget for Next.js. Reports land in a Google Sheet through an Apps Script sink — no database, no vendor, no cookie banner.",
   "license": "MIT",
   "author": "Marcin Laskowski",

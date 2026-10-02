@@ -35,7 +35,7 @@ Google Sheet
 ## Install
 
 ```bash
-npm i github:marcin-laskowski/feedback#v0.1.2
+npm i github:marcin-laskowski/feedback#v0.2.0
 ```
 
 The package ships TypeScript source and is compiled by the host app:

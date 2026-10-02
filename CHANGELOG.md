@@ -3,9 +3,11 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [semver](https://semver.org/). Consumers install by tag
-(`npm i github:marcin-laskowski/feedback#v0.1.2`), so every release needs one.
+(`npm i github:marcin-laskowski/feedback#v0.2.0`), so every release needs one.
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-10-02
 
 ### Changed
 
