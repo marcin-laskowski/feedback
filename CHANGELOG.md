@@ -3,9 +3,19 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [semver](https://semver.org/). Consumers install by tag
-(`npm i github:marcin-laskowski/feedback#v0.2.0`), so every release needs one.
+(`npm i github:marcin-laskowski/feedback#v0.2.1`), so every release needs one.
 
 ## [Unreleased]
+
+## [0.2.1] - 2026-10-02
+
+### Fixed
+
+- iOS Safari no longer zooms the page in when a field in the panel is tapped.
+  Safari zooms into any input under 16 px on focus and does not zoom back out;
+  on touch screens (`pointer: coarse`) the fields are now 16 px. The desktop
+  keeps 14 px. The host page cannot fix this for the widget, because its CSS
+  does not cross the shadow root.
 
 ## [0.2.0] - 2026-10-02
 
