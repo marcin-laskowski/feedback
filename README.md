@@ -101,6 +101,13 @@ Setting up the sink takes about 30 minutes and is documented in
 [`apps-script/README.md`](apps-script/README.md). Nothing else works until a
 `curl` command appends a row.
 
+When a release changes `Code.gs`, the script has to be updated as well, and the
+update only reaches a site once the deployment that site calls is moved to the
+new version. Saving the file is not enough, and a *new* deployment gets a new
+URL the site does not know about. The steps, and how to tell which version a
+site is hitting, are in
+[Updating the script after it is live](apps-script/README.md#updating-the-script-after-it-is-live).
+
 ## What ends up in the sheet
 
 33 columns, in a fixed order. The report itself (`type`, `severity`, `what`,

@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `apps-script/README.md` documents how to update a script that is already
+  live: raise the version of the existing deployment instead of creating a new
+  one, read the Deployment column in Executions to see which version a site is
+  hitting, and either raise that deployment's version or point the site's
+  `FEEDBACK_SINK_URL` at the updated one. Written after the 0.2.0 update, where
+  a second deployment got the new code while the site kept calling the first.
+
+### Fixed
+
+- The `curl` example for a full submission no longer uses `-X POST`. Combined
+  with `-L` it forces a POST on Google's redirect target and returns an HTML
+  405 page instead of the script's JSON.
+
 ## [0.2.1] - 2026-10-02
 
 ### Fixed

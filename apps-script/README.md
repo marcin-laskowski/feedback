@@ -36,7 +36,7 @@ In the editor, select `setup` and run it. Authorise when prompted (it's your own
 
 Check the log: headers written, token present. Look at the sheet - row 1 bold and frozen, 33 columns.
 
-**Updating an existing sheet.** When a new version of `Code.gs` adds a column (0.2 added `reporter`), paste the new file, redeploy (step 4, same deployment), and the column appears by itself at the far right on the next report - `syncHeaders_()` appends any header the sheet is missing. Nothing is moved or renamed.
+**Updating an existing sheet.** When a new version of `Code.gs` adds a column (0.2 added `reporter`), paste the new file and raise the version of the existing deployment - see [Updating the script after it is live](#updating-the-script-after-it-is-live). The column appears by itself at the far right on the next report: `syncHeaders_()` appends any header the sheet is missing. Nothing is moved or renamed.
 
 Then run `testLocal`. A row should appear. **Check cell H2** - it must read `'=IMPORTXML(...)` with a leading apostrophe, displayed as text. If Sheets evaluated it instead, stop and fix the escape before going further.
 
@@ -72,7 +72,7 @@ curl -sL "$FEEDBACK_SINK_URL"
 Full submission:
 
 ```bash
-curl -sL -X POST "$FEEDBACK_SINK_URL" \
+curl -sL "$FEEDBACK_SINK_URL" \
   -H 'Content-Type: application/json' \
   -d '{
     "token": "'"$FEEDBACK_SINK_TOKEN"'",
@@ -110,6 +110,8 @@ curl -sL -X POST "$FEEDBACK_SINK_URL" \
 
 **`-L` is not optional.** Apps Script answers with a 302 to `googleusercontent.com` and the real body is at the redirect target. A client that doesn't follow redirects reads an empty response, concludes the write failed, retries - and duplicates the row. The Next.js handler must use `redirect: 'follow'` for the same reason.
 
+**Do not add `-X POST`.** With `-d` curl already sends a POST, and after the 302 it switches to GET for the redirect target, which is what Google expects. `-X POST` forces a POST there too and the answer is an HTML page with HTTP 405 instead of the script's JSON.
+
 ### Cases that must also behave
 
 ```bash
@@ -133,6 +135,49 @@ Columns: id, date, reporter, what, why, page, status. No `notes`, no console err
 That view is what the CEO review calls closing the loop. It's the entire return path, and it costs one formula.
 
 ---
+
+## Updating the script after it is live
+
+Pasting a new `Code.gs` and saving it changes nothing for the sites. A web app deployment is pinned to a numbered version of the code and keeps serving that version until the deployment itself is edited.
+
+1. Paste the new `Code.gs` and save.
+2. **Deploy → Manage deployments.** Not *New deployment*.
+3. Select the existing deployment, click the pencil, set **Version** to **New version**, and click **Deploy**.
+
+The `/exec` URL stays the same, so no site needs touching.
+
+**New deployment is the trap.** It creates a second deployment with a second URL. Every site keeps calling the first one, which is still pinned to the old code. Nothing fails: reports keep arriving and are written by the old script, so the only symptom is that the new behaviour never shows up - a new column stays missing, a new field stays empty.
+
+### Which version is a site actually hitting
+
+Open **Executions** in the left sidebar. The **Deployment** column shows the version that handled each call. Send one report from the site and look at the newest `doPost` row:
+
+| Deployment column | Meaning |
+|---|---|
+| the version you just deployed | The site is on the new code. |
+| an older version, e.g. `Version 1` | The site's URL belongs to a different deployment than the one you updated. |
+| `Head` | A run from the editor, not from a site. |
+
+To find out which deployment a site uses, compare the id after `/s/` in the site's `FEEDBACK_SINK_URL` with the **Deployment ID** shown in Manage deployments.
+
+Two ways out when the site is on an old deployment:
+
+- **Raise the version of the deployment the site uses** (steps 2-3 above, on that deployment). Nothing changes on the site.
+- **Point the site at the updated deployment.** Set its `FEEDBACK_SINK_URL` to that deployment's `/exec` URL and redeploy the site. The token stays as it is: every deployment of one script reads the same Script Properties.
+
+Then archive the deployment nothing calls any more, so the next update has only one place to go.
+
+### Checking a URL without writing a row
+
+```bash
+curl -sL "$FEEDBACK_SINK_URL"
+# {"ok":true,"warm":true,...}
+
+curl -sL "$FEEDBACK_SINK_URL" -H 'Content-Type: application/json' -d '{"token":"wrong"}'
+# {"ok":false,"error":"unauthorized"}
+```
+
+Neither call touches the sheet, and both show up in Executions with the version that answered - which is the quickest way to tell what a given URL is serving.
 
 ## Version control
 
