@@ -284,6 +284,13 @@ button, input, textarea {
 /* The single-line variant (the reporter's name): same frame, no textarea floor. */
 .fb-input--line { min-height: 0; }
 
+/* iOS Safari zooms the page into any field under 16px on focus and does not
+   zoom back out. Touch screens get 16px; the desktop keeps the 14px register.
+   The host's own fix cannot reach in here - the shadow root keeps it out. */
+@media (pointer: coarse) {
+  .fb-input { font-size: 16px; }
+}
+
 /* ------------------------------------------------------------------ strip */
 
 /* The tinted band under the head: quiet fill (--surface-tint), a separator
