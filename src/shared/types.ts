@@ -11,6 +11,9 @@ export const SCHEMA_VERSION = 1;
 /** Max length of every free-text field. Mirrors MAX_TEXT in Code.gs. */
 export const MAX_TEXT = 2000;
 
+/** Max length of the reporter's name. Mirrors the clip in Code.gs. */
+export const MAX_REPORTER = 120;
+
 /** Max bytes accepted by the route handler. A full report is ~4 kB. */
 export const MAX_BODY_BYTES = 32_000;
 
@@ -24,7 +27,7 @@ export type DeviceKind = "desktop" | "tablet" | "mobile";
 
 /**
  * Everything the browser knows about the moment the report was written.
- * `browser` / `os` / `device` are the CLIENT's parse — rendered in the
+ * `browser` / `os` / `device` are the CLIENT's parse - rendered in the
  * context strip. The server re-derives them from `userAgent` and never
  * trusts these three (D18).
  */
@@ -51,7 +54,7 @@ export type FeedbackContext = {
   userAgent: string;
 };
 
-/** What the widget POSTs to `/api/feedback`. No token — the server holds it. */
+/** What the widget POSTs to `/api/feedback`. No token - the server holds it. */
 export type FeedbackSubmission = {
   schemaVersion: number;
   project: string;
@@ -60,7 +63,13 @@ export type FeedbackSubmission = {
   what: string;
   why: string;
   /**
-   * Dropped from the UI — the two questions that matter are what and why, and a
+   * Who is reporting, as they typed it. A sheet shared by several reviewers is
+   * useless for follow-up questions without it. Remembered per browser, so it
+   * is typed once.
+   */
+  reporter: string;
+  /**
+   * Dropped from the UI - the two questions that matter are what and why, and a
    * third optional box mostly collected empty strings. The column stays in the
    * sheet (additive-only) and the field stays in the contract, so a consumer
    * that wants it back does not need a schema change.

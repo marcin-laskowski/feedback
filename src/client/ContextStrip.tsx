@@ -7,7 +7,7 @@
  * sentence claiming you capture it". A strip that shows four things while the
  * payload stores twenty is a transparency gesture, which is worse than an
  * honest disclaimer. Expanded, this lists everything that leaves the browser,
- * in the reporter's own language — which is also why it replaces the privacy
+ * in the reporter's own language - which is also why it replaces the privacy
  * notice under the submit button.
  *
  * It renders `pathname` and never the query string (D20): a URL can be
@@ -41,9 +41,23 @@ export function ContextStrip({ context, expanded, onToggle }: Props) {
         onClick={onToggle}
       >
         <span className="fb-strip__summary">{summary}</span>
-        <span className="fb-strip__chevron" aria-hidden="true">
-          ⌄
-        </span>
+        <svg
+          className="fb-strip__chevron"
+          width="10"
+          height="6"
+          viewBox="0 0 10 6"
+          fill="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M1 1l4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
 
       {expanded && (

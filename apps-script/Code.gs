@@ -1,5 +1,5 @@
 /**
- * Unhyped Feedback — sink
+ * Unhyped Feedback - sink
  *
  * Receives feedback reports and appends them to a Sheet.
  * Called server-side only (from a Next.js route handler), never from a browser.
@@ -9,7 +9,7 @@
 
 var SCHEMA_VERSION = 1;
 
-/** Column order. ADDITIVE ONLY — append new columns, never rename or reorder. */
+/** Column order. ADDITIVE ONLY - append new columns, never rename or reorder. */
 var HEADERS = [
   'id',
   'received_at',
@@ -42,7 +42,8 @@ var HEADERS = [
   'user_agent_raw',
   'deployment',
   'status',
-  'notes'
+  'notes',
+  'reporter'
 ];
 
 /** Query params whose VALUES are replaced before storage. */
@@ -102,11 +103,11 @@ function doPost(e) {
     lock.waitLock(10000);
 
     var sheet = sheet_();
-    var headers = headerRow_(sheet);
+    var headers = syncHeaders_(sheet);
     var id = 'fb_' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
     var record = buildRecord_(id, body);
 
-    // Write by header NAME, never by index — the sheet owner will reorder columns.
+    // Write by header NAME, never by index - the sheet owner will reorder columns.
     var row = headers.map(function (name) {
       return escapeCell_(record[name]);
     });
@@ -165,8 +166,10 @@ function buildRecord_(id, b) {
     user_agent_raw:  text_(ctx.userAgent, 500),
     deployment:      deployment_(),
 
-    status:          '',   // filled in by hand — this is the client-facing column
-    notes:           ''    // internal. See README before sharing the sheet.
+    status:          '',   // filled in by hand - this is the client-facing column
+    notes:           '',   // internal. See README before sharing the sheet.
+
+    reporter:        text_(b.reporter, 120)   // who filed it, as typed in the widget
   };
 }
 
@@ -239,6 +242,28 @@ function headerRow_(sheet) {
               .map(function (h) { return String(h).trim(); });
 }
 
+/**
+ * Returns the header row, after appending any column from HEADERS the sheet
+ * does not have yet. This is what makes "additive only" true in practice: a
+ * new field in Code.gs shows up as a new column at the far right of an
+ * existing sheet, instead of being dropped silently because nobody typed the
+ * header by hand. Existing columns are never moved, renamed or removed.
+ */
+function syncHeaders_(sheet) {
+  var existing = headerRow_(sheet);
+  var missing = HEADERS.filter(function (name) {
+    return existing.indexOf(name) === -1;
+  });
+  if (!missing.length) return existing;
+
+  var start = sheet.getLastColumn() + 1;
+  var shortBy = start + missing.length - 1 - sheet.getMaxColumns();
+  if (shortBy > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), shortBy);
+
+  sheet.getRange(1, start, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  return existing.concat(missing);
+}
+
 function writeHeaders_(sheet) {
   sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
@@ -264,15 +289,16 @@ function json_(obj) {
 // These two are deliberately NOT suffixed with an underscore, unlike every
 // other helper in this file. In Apps Script a trailing underscore marks a
 // function as private, and a private function does not appear in the editor's
-// Run dropdown — which makes it impossible to run the one thing you are
+// Run dropdown - which makes it impossible to run the one thing you are
 // supposed to run before deploying. Do not "fix" them to match the convention.
 
 /** Run once from the editor, after setting the script properties. */
 function setup() {
   var sheet = sheet_();
   if (sheet.getLastRow() === 0) writeHeaders_(sheet);
+  syncHeaders_(sheet);
   Logger.log('Sheet ready: ' + sheet.getName() + ' with ' + HEADERS.length + ' columns');
-  Logger.log('Token set: ' + (prop_('FEEDBACK_TOKEN') ? 'yes' : 'NO — set it before deploying'));
+  Logger.log('Token set: ' + (prop_('FEEDBACK_TOKEN') ? 'yes' : 'NO - set it before deploying'));
 }
 
 /** Run from the editor to append a row without deploying. */
@@ -289,6 +315,7 @@ function testLocal() {
         what: '=IMPORTXML("https://evil.tld","//a")',   // must land escaped
         why: 'Sprawdzam, czy escape formuł działa.',
         how: '',
+        reporter: 'Test Lokalny',
         context: {
           pathname: '/cennik',
           href: 'https://example.com/cennik?token=SECRET123&utm_source=nl',
