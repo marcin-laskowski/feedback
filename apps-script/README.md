@@ -1,4 +1,4 @@
-# Apps Script sink - setup & verification
+# Apps Script sink – setup & verification
 
 M0 of the feedback widget. Goal: a `curl` command appends a correctly escaped row to a Sheet. Nothing else in the plan matters until this works.
 
@@ -14,7 +14,7 @@ New Google Sheet, name it whatever. Copy the ID from the URL:
 https://docs.google.com/spreadsheets/d/<THIS_PART>/edit
 ```
 
-Don't create headers by hand - `setup()` writes them, in the exact order `Code.gs` expects.
+Don't create headers by hand – `setup()` writes them, in the exact order `Code.gs` expects.
 
 ## 2. Create the script
 
@@ -25,20 +25,20 @@ Don't create headers by hand - `setup()` writes them, in the exact order `Code.g
 | Property | Value |
 |---|---|
 | `SHEET_ID` | the ID from step 1 |
-| `FEEDBACK_TOKEN` | a long random string - `openssl rand -hex 24` |
+| `FEEDBACK_TOKEN` | a long random string – `openssl rand -hex 24` |
 | `SHEET_TAB` | `reports` (optional, this is the default) |
 
-Optionally `DEPLOYMENT_VERSION` - a short label written into every row, so you can tell which script version produced a report.
+Optionally `DEPLOYMENT_VERSION` – a short label written into every row, so you can tell which script version produced a report.
 
 ## 3. Initialise
 
 In the editor, select `setup` and run it. Authorise when prompted (it's your own script touching your own sheet).
 
-Check the log: headers written, token present. Look at the sheet - row 1 bold and frozen, 33 columns.
+Check the log: headers written, token present. Look at the sheet – row 1 bold and frozen, 33 columns.
 
-**Updating an existing sheet.** When a new version of `Code.gs` adds a column (0.2 added `reporter`), paste the new file and raise the version of the existing deployment - see [Updating the script after it is live](#updating-the-script-after-it-is-live). The column appears by itself at the far right on the next report: `syncHeaders_()` appends any header the sheet is missing. Nothing is moved or renamed.
+**Updating an existing sheet.** When a new version of `Code.gs` adds a column (0.2 added `reporter`), paste the new file and raise the version of the existing deployment – see [Updating the script after it is live](#updating-the-script-after-it-is-live). The column appears by itself at the far right on the next report: `syncHeaders_()` appends any header the sheet is missing. Nothing is moved or renamed.
 
-Then run `testLocal`. A row should appear. **Check cell H2** - it must read `'=IMPORTXML(...)` with a leading apostrophe, displayed as text. If Sheets evaluated it instead, stop and fix the escape before going further.
+Then run `testLocal`. A row should appear. **Check cell H2** – it must read `'=IMPORTXML(...)` with a leading apostrophe, displayed as text. If Sheets evaluated it instead, stop and fix the escape before going further.
 
 Check `page_url` too: `token=SECRET123` must have become `token=[redacted]`, while `utm_source=nl` survives intact.
 
@@ -51,7 +51,7 @@ Check `page_url` too: `token=SECRET123` must have become `token=[redacted]`, whi
 | Execute as | **Me** |
 | Who has access | **Anyone** |
 
-"Anyone" is required - the caller is a Vercel function with no Google identity. The endpoint is protected by `FEEDBACK_TOKEN`, not by Google auth, which is why the URL and the token both have to stay server-side.
+"Anyone" is required – the caller is a Vercel function with no Google identity. The endpoint is protected by `FEEDBACK_TOKEN`, not by Google auth, which is why the URL and the token both have to stay server-side.
 
 Copy the `/exec` URL. Together with the token, these are the two environment variables the Next.js route handler needs:
 
@@ -88,7 +88,7 @@ curl -sL "$FEEDBACK_SINK_URL" \
     "context": {
       "pathname": "/cennik",
       "href": "https://example.com/cennik?utm_source=nl",
-      "title": "Cennik - Acme",
+      "title": "Cennik – Acme",
       "viewport": "1440×900",
       "screen": "2560×1440 @2x",
       "browser": "Chrome 141",
@@ -108,7 +108,7 @@ curl -sL "$FEEDBACK_SINK_URL" \
 # {"ok":true,"id":"fb_…","deployment":"dev"}
 ```
 
-**`-L` is not optional.** Apps Script answers with a 302 to `googleusercontent.com` and the real body is at the redirect target. A client that doesn't follow redirects reads an empty response, concludes the write failed, retries - and duplicates the row. The Next.js handler must use `redirect: 'follow'` for the same reason.
+**`-L` is not optional.** Apps Script answers with a 302 to `googleusercontent.com` and the real body is at the redirect target. A client that doesn't follow redirects reads an empty response, concludes the write failed, retries – and duplicates the row. The Next.js handler must use `redirect: 'follow'` for the same reason.
 
 **Do not add `-X POST`.** With `-d` curl already sends a POST, and after the 302 it switches to GET for the redirect target, which is what Google expects. `-X POST` forces a POST there too and the answer is an HTML page with HTTP 405 instead of the script's JSON.
 
@@ -120,9 +120,20 @@ curl -sL "$FEEDBACK_SINK_URL" \
 # invalid JSON  → {"ok":false,"error":"bad_json"}
 ```
 
+Two more answers exist that `curl` cannot easily provoke:
+
+```bash
+# lock held by another write for > 3 s  → {"ok":false,"error":"busy","stage":"lock"}
+# anything thrown                       → {"ok":false,"error":"server","stage":"append","message":"Exception: …"}
+```
+
+`stage` is where `doPost` was (`auth`, `open_sheet`, `read_headers`, `lock`,
+`sync_headers`, `append`), and the route handler writes both fields to its log.
+Nothing is written on `busy`; on `server` it depends on the stage.
+
 ## 6. Prepare the client-facing view
 
-The `notes` column is yours. The CEO review made the sheet a shared board, which means the client will read it - including anything you write there.
+The `notes` column is yours. The CEO review made the sheet a shared board, which means the client will read it – including anything you write there.
 
 Before sharing, add a second tab, `board`, with one formula in A1:
 
@@ -130,7 +141,7 @@ Before sharing, add a second tab, `board`, with one formula in A1:
 =QUERY(reports!A:AG; "select A, B, AG, H, I, K, AE where A is not null order by B desc"; 1)
 ```
 
-Columns: id, date, reporter, what, why, page, status. No `notes`, no console errors, no session IDs. The letters assume the default column order - if you moved columns in `reports`, adjust them. `type` and `severity` are left out on purpose: the widget no longer asks for them, so both columns hold a constant. Share **that** tab - right-click → Protect sheet on `reports`, or share the whole file read-only and accept that everything is visible.
+Columns: id, date, reporter, what, why, page, status. No `notes`, no console errors, no session IDs. The letters assume the default column order – if you moved columns in `reports`, adjust them. `type` and `severity` are left out on purpose: the widget no longer asks for them, so both columns hold a constant. Share **that** tab – right-click → Protect sheet on `reports`, or share the whole file read-only and accept that everything is visible.
 
 That view is what the CEO review calls closing the loop. It's the entire return path, and it costs one formula.
 
@@ -146,7 +157,7 @@ Pasting a new `Code.gs` and saving it changes nothing for the sites. A web app d
 
 The `/exec` URL stays the same, so no site needs touching.
 
-**New deployment is the trap.** It creates a second deployment with a second URL. Every site keeps calling the first one, which is still pinned to the old code. Nothing fails: reports keep arriving and are written by the old script, so the only symptom is that the new behaviour never shows up - a new column stays missing, a new field stays empty.
+**New deployment is the trap.** It creates a second deployment with a second URL. Every site keeps calling the first one, which is still pinned to the old code. Nothing fails: reports keep arriving and are written by the old script, so the only symptom is that the new behaviour never shows up – a new column stays missing, a new field stays empty.
 
 ### Which version is a site actually hitting
 
@@ -177,7 +188,34 @@ curl -sL "$FEEDBACK_SINK_URL" -H 'Content-Type: application/json' -d '{"token":"
 # {"ok":false,"error":"unauthorized"}
 ```
 
-Neither call touches the sheet, and both show up in Executions with the version that answered - which is the quickest way to tell what a given URL is serving.
+Neither call touches the sheet, and both show up in Executions with the version that answered – which is the quickest way to tell what a given URL is serving.
+
+## When reports fail with `busy` or `server`
+
+The script takes a script-wide lock around the append, and holds it until the
+execution ends. A Google call that stalls inside that window keeps the lock
+until Apps Script kills the run, which is **6 minutes** on a consumer account.
+Every report arriving in the meantime waits 3 s, gets `busy`, and the panel
+asks the reporter to try again in a few seconds. Before 0.2.2 the wait was
+10 s and the answer was a generic `server`, which is how one stuck write
+looked like a broken sink for six minutes.
+
+What to look at, in order:
+
+1. **Executions**, filtered to `doPost`. A run with a duration near 360 s and
+   a status of *Timed out* or *Failed* is the one that held the lock. The rows
+   after it, each about 3 s long, are the reports it blocked.
+2. The route handler's log on the host (Vercel: `vercel logs -p <project>
+   --since 1h -q feedback`). Each failed POST logs the sink's `stage`,
+   `message`, and how long the call took. `busy` lines all take about the
+   same time; that is the signature of a held lock, not of a slow Google.
+3. The `reports` tab. The run that timed out may still have written its row
+   after the route gave up, in which case the reporter's retry is a duplicate.
+   Delete one by hand.
+
+There is nothing to fix on the script side after such a run; it recovers by
+itself when the stuck execution is killed. If it happens repeatedly, the
+Executions log shows which stage it stalls in.
 
 ## Version control
 
@@ -193,7 +231,7 @@ clasp deploy -i <DEPLOYMENT_ID> -d "…"   # updates the existing /exec URL
 
 `clasp deploy` with `-i` keeps the same URL. Creating a *new* deployment gives you a new URL and silently orphans every site pointing at the old one.
 
-Commit `Code.gs`, `appsscript.json`, and this README to `/apps-script` in the widget repo. Never commit the token or the sheet ID - they live in Script Properties.
+Commit `Code.gs`, `appsscript.json`, and this README to `/apps-script` in the widget repo. Never commit the token or the sheet ID – they live in Script Properties.
 
 ---
 
@@ -202,11 +240,12 @@ Commit `Code.gs`, `appsscript.json`, and this README to `/apps-script` in the wi
 | Limit | Why it's fine now |
 |---|---|
 | No rate limiting | Three known reporters on one site. Honeypot in the Next handler. Add `CacheService` when it goes public. |
-| No idempotency | Submit is synchronous with no auto-retry, and `-L`/`redirect: 'follow'` removes the duplicate-row cause. |
+| No idempotency | Submit is synchronous with no auto-retry, so a duplicate needs a human to press send twice. That can happen after a route timeout, because the script run keeps going and may still write the row. One duplicate in a sheet a human reads costs less than the dedupe would. |
+| One write at a time | The lock is script-wide and the wait is 3 s; a second report arriving mid-write gets `busy` and the panel asks for a retry. A stuck write holds the lock for up to 6 min. The lockless alternative is the Sheets Advanced Service `Values.append`, a separate change. |
 | No `schemaVersion` negotiation | The field is stored; nothing branches on it yet. One consumer. |
 | Cold start 1-3 s | The warm-up ping on panel open covers it. Measure it in M1 before optimising further. |
 | Apps Script quotas | ~20k URL-fetch calls/day, 90 min/day runtime. Orders of magnitude above realistic volume. |
 
 ## Next
 
-`shared/types.ts` and `shared/validate.ts` first - the payload shape above is the contract, and both sides should compile against it before any UI exists.
+`shared/types.ts` and `shared/validate.ts` first – the payload shape above is the contract, and both sides should compile against it before any UI exists.

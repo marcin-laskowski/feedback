@@ -22,6 +22,7 @@ import {
   type FeedbackSubmission,
   type SinkPayload,
   type SinkResponse,
+  type SubmitError,
   type SubmitResponse,
 } from "../shared/types";
 import { redactUrl } from "../shared/redact";
@@ -31,15 +32,22 @@ import { clip, validateReport } from "../shared/validate";
 /** Client aborts at 15 s; the route gives the sink 14 s so we own the timeout. */
 const SINK_TIMEOUT_MS = 14_000;
 const WARMUP_TIMEOUT_MS = 3_000;
+/** A write past this is logged even when it succeeds. A healthy append takes 1-3 s. */
+const SLOW_SINK_MS = 6_000;
+/** Sent with `busy`. A held lock normally clears in well under this. */
+const BUSY_RETRY_AFTER_S = 10;
 
 /**
- * Rate limit per IP, sliding window, in memory. A review session is bursty -
- * one person walking a site files a dozen reports in an hour - so the ceiling
- * is high. It exists to stop a loop, not to ration honest use. Best-effort on
- * serverless: the window is per instance.
+ * Rate limit per IP, sliding window, in memory. It exists to stop a loop, not
+ * to ration honest use, so the window is short and the ceiling is above what
+ * a person can type: filing a report takes half a minute at best, which puts
+ * one reviewer at ten per five minutes. A loop is capped at 180 an hour,
+ * which the sink absorbs without noticing. A short window also means the
+ * panel can honestly say "spróbuj za kilka minut" instead of "za godzinę".
+ * Best-effort on serverless: the window is per instance.
  */
-const RL_WINDOW_MS = 60 * 60 * 1000;
-const RL_MAX = 30;
+const RL_WINDOW_MS = 5 * 60 * 1000;
+const RL_MAX = 15;
 const rlHits = new Map<string, number[]>();
 
 function rateLimited(ip: string): boolean {
@@ -55,8 +63,17 @@ function rateLimited(ip: string): boolean {
   return false;
 }
 
-function json(body: SubmitResponse, status: number): Response {
-  return Response.json(body, { status });
+function json(body: SubmitResponse, status: number, headers?: HeadersInit): Response {
+  return Response.json(body, { status, headers });
+}
+
+/** A failure without field names. `validation` carries fields and goes through `json`. */
+function fail(
+  error: Exclude<SubmitError, "validation">,
+  status: number,
+  headers?: HeadersInit
+): Response {
+  return json({ ok: false, error }, status, headers);
 }
 
 /** Names of the required variables that are missing or empty. */
@@ -89,7 +106,7 @@ function config(): { url: string; token: string } | null {
  * It reports on the sink rather than on itself, which costs one body read and
  * buys the one thing worth having here: `curl /api/feedback` tells you whether
  * the sink is actually configured. An earlier version returned `{ ok: true }`
- * as long as the fetch resolved - including when Google answered 403 with a
+ * as long as the fetch resolved – including when Google answered 403 with a
  * login page, which is exactly the failure this endpoint should surface.
  */
 export async function GET(): Promise<Response> {
@@ -98,7 +115,7 @@ export async function GET(): Promise<Response> {
     // Names, never values. Which variable is missing is the whole question when
     // a deploy answers "unconfigured", and a health check that makes you guess
     // between two candidates is half a health check. Variable names are not
-    // secrets - they are in the README.
+    // secrets – they are in the README.
     return Response.json(
       { ok: false, warm: false, sink: "unconfigured", missing: missingConfig() },
       { status: 503 }
@@ -116,7 +133,7 @@ export async function GET(): Promise<Response> {
     // The sink answers JSON. HTML means Google answered instead of the script.
     if (!res.ok || !body.trimStart().startsWith("{")) {
       console.error(
-        `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} - ` +
+        `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} – ` +
           `check that the Apps Script deployment is a Web app with access "Anyone", ` +
           `and that FEEDBACK_SINK_URL ends in /exec`
       );
@@ -167,7 +184,7 @@ export async function POST(req: Request): Promise<Response> {
   const ctx = body.context ?? ({} as FeedbackSubmission["context"]);
 
   // The client's UA parse is what it RENDERED. What we store is what we derive
-  // from the raw string ourselves (D18) - the two are the same function, but
+  // from the raw string ourselves (D18) – the two are the same function, but
   // only one of them is trustworthy.
   const parsed = parseUserAgent(String(ctx.userAgent ?? req.headers.get("user-agent") ?? ""));
 
@@ -178,7 +195,7 @@ export async function POST(req: Request): Promise<Response> {
     environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
     country: req.headers.get("x-vercel-ip-country") ?? "",
 
-    // Validated above - the casts are safe and keep the sink payload typed.
+    // Validated above – the casts are safe and keep the sink payload typed.
     type: body.type as FeedbackSubmission["type"],
     severity: body.severity as FeedbackSubmission["severity"],
     what: clip(body.what, MAX_TEXT),
@@ -211,6 +228,17 @@ export async function POST(req: Request): Promise<Response> {
     },
   };
 
+  // Every log line below carries how long the sink took. The number is what
+  // separates "Google was slow" from "the script was stuck behind its lock":
+  // a lock timeout shows up as the same duration on every attempt.
+  const started = Date.now();
+  const took = () => `${Date.now() - started} ms`;
+
+  // Kept in scope: a timeout that fires while the body is being read rejects
+  // with an AbortError, not a TimeoutError, so the error's name alone does not
+  // say whether this was our clock. The signal does.
+  const deadline = AbortSignal.timeout(SINK_TIMEOUT_MS);
+
   let result: SinkResponse;
   try {
     // redirect: "follow" is load-bearing. Apps Script answers 302 and puts the
@@ -221,35 +249,64 @@ export async function POST(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       redirect: "follow",
-      signal: AbortSignal.timeout(SINK_TIMEOUT_MS),
+      signal: deadline,
     });
 
     // Read as text first. When the deployment is misconfigured Google answers
     // with an HTML login page, and `res.json()` throws a parse error that says
-    // nothing about the actual problem - which is a deploy setting, not JSON.
+    // nothing about the actual problem – which is a deploy setting, not JSON.
     const body = await res.text();
     try {
       result = JSON.parse(body) as SinkResponse;
     } catch {
       console.error(
         `[feedback] sink answered HTTP ${res.status} ${res.headers.get("content-type")} ` +
-          `instead of JSON: ${body.slice(0, 120)}`
+          `instead of JSON after ${took()}: ${body.slice(0, 120)}`
       );
-      return json({ ok: false, error: "unavailable" }, 502);
+      return fail("unavailable", 502);
     }
   } catch (e) {
-    console.error("[feedback] sink unreachable:", e);
-    return json({ ok: false, error: "unavailable" }, 502);
+    // The route gave up; the sink did not. An Apps Script execution keeps
+    // running after its caller disconnects and may still write the row, so
+    // this is "unconfirmed", not "failed", and the widget says so. A stuck
+    // execution also keeps the script lock until Google kills it, which is
+    // what turns one slow write into minutes of `busy` for everyone else.
+    if (deadline.aborted) {
+      console.error(`[feedback] sink timed out after ${took()}`);
+      return fail("timeout", 504);
+    }
+    console.error(`[feedback] sink unreachable after ${took()}:`, e);
+    return fail("unavailable", 502);
   }
 
   if (!result.ok) {
-    // `unauthorized` here means OUR token is wrong - a deploy problem, not a
-    // user problem. Log it loudly; the user just sees "try again".
-    console.error("[feedback] sink rejected:", result.error, result.fields ?? "");
     if (result.error === "validation") {
       return json({ ok: false, error: "validation", fields: result.fields ?? [] }, 400);
     }
-    return json({ ok: false, error: "server" }, 502);
+
+    // The sink's lock was held by another write for longer than it waits.
+    // Nothing was written; the reporter is asked to try again in a moment.
+    if (result.error === "busy") {
+      console.warn(`[feedback] sink busy after ${took()}`);
+      return fail("busy", 503, { "Retry-After": String(BUSY_RETRY_AFTER_S) });
+    }
+
+    // `unauthorized` here means OUR token is wrong – a deploy problem, not a
+    // user problem. `server` carries the stage the script was in and the
+    // exception text, which is the whole diagnosis when it is a lock timeout
+    // or a Sheets outage. Log it loudly; the user just sees "try again".
+    console.error(
+      `[feedback] sink rejected after ${took()}: ${result.error}` +
+        (result.stage ? ` at ${result.stage}` : "") +
+        (result.message ? ` – ${result.message}` : "") +
+        (result.fields?.length ? ` fields=${result.fields.join(",")}` : "")
+    );
+    return fail("server", 502);
+  }
+
+  const elapsed = Date.now() - started;
+  if (elapsed > SLOW_SINK_MS) {
+    console.warn(`[feedback] sink slow: ${elapsed} ms for ${result.id}`);
   }
 
   return json({ ok: true, id: result.id }, 200);

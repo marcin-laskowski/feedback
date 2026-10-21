@@ -3,7 +3,7 @@
  *
  * Polish is the default because every consumer today is a Polish site. When a
  * project needs another language, this file grows a second object and the
- * widget takes a `strings` prop - not scattered literals across five
+ * widget takes a `strings` prop – not scattered literals across five
  * components.
  */
 
@@ -16,19 +16,20 @@ export const strings = {
   panelTitle: "Zgłoś uwagę",
   close: "Zamknij",
 
-  // Context strip - a disclosure, not a summary. Everything stored is visible
+  // Context strip – a disclosure, not a summary. Everything stored is visible
   // here, which is what makes the transparency claim true rather than decorative.
-  stripShow: "Pokaż, co zbieramy",
+  stripShow: "Pokaż, co dołączamy do zgłoszenia",
   stripHide: "Ukryj szczegóły",
   stripPage: "strona",
   stripWindow: "okno",
   stripBrowser: "przeglądarka",
   stripLanguage: "język",
   stripErrors: "błędy",
-  stripSession: "sesja",
-  stripSessionValue: "anonimowy identyfikator",
-  stripErrorsValue: (count: number) =>
-    count === 1 ? "1 wykryty na tej stronie" : `${count} wykryte na tej stronie`,
+  stripSession: "wizyta",
+  stripSessionValue: "anonimowy kod wizyty",
+  // Number last, so no form of "wykryty" has to agree with it: "5 wykryte"
+  // was wrong and "wykrytych" would need a third branch for 12-14, 22-24, ...
+  stripErrorsValue: (count: number) => `wykryte na tej stronie: ${count}`,
   stripNoErrors: "brak",
   stripFooter: "Nie zapisujemy Twojego adresu IP.",
 
@@ -48,18 +49,37 @@ export const strings = {
   send: "Wyślij",
   sending: "Wysyłam…",
 
-  // Draft restore. An orientation cue, not a banner - it disappears on the
+  // Draft restore. An orientation cue, not a banner – it disappears on the
   // first keystroke. Without it, a form that fills itself reads as a form that
   // was already submitted.
   draftRestored: "Wróciliśmy do Twojego szkicu",
   draftDiscard: "Zacznij od nowa",
 
   successTitle: "Dzięki. Mamy to.",
-  successBody: "Zgłoszenie trafiło na listę.",
+  successBody: "Zgłoszenie trafiło na listę zgłoszeń.",
   successAgain: "Zgłoś kolejną rzecz",
 
-  errorSend: "Nie udało się wysłać. Twój tekst jest zapisany - spróbuj jeszcze raz.",
-  errorRateLimited: "Za dużo zgłoszeń z tego adresu. Spróbuj za chwilę.",
+  // Every failure note says three things in the same order: what happened,
+  // that the text is still in the form, what to do now and when. "Został w
+  // formularzu" and not "jest zapisany": "zapisany" reads as delivered, which
+  // is exactly the wrong thing to say when delivery is what failed. The wait
+  // is a number, never "za chwilę": a reader cannot act on "a moment". Where
+  // the report ends up is always "lista zgłoszeń", here and in successBody.
+  errorSend:
+    "Nie udało się wysłać. Twój tekst został w formularzu – spróbuj jeszcze raz albo napisz do nas inaczej.",
+  // The sink was writing another report (or stuck on one). Nothing was
+  // written, so a retry is safe. Not "kolejka": nothing is queued, and the
+  // reporter has to press send again. The route sends Retry-After: 10.
+  errorBusy:
+    "Nie możemy teraz przyjąć zgłoszenia. Twój tekst został w formularzu – spróbuj za kilkanaście sekund.",
+  // The sink did not answer in time. The row may still land, so the sentence
+  // says "no confirmation", not "failed".
+  errorTimeout:
+    "Nie dostaliśmy potwierdzenia. Twój tekst został w formularzu – spróbuj za kilkanaście sekund.",
+  // The window is five minutes (RL_WINDOW_MS in the route), so "kilka minut"
+  // is always enough.
+  errorRateLimited:
+    "Za dużo zgłoszeń w krótkim czasie. Twój tekst został w formularzu – spróbuj za kilka minut.",
   errorValidation: "Uzupełnij zaznaczone pola.",
 } as const;
 
