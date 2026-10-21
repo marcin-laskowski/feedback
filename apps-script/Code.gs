@@ -1,5 +1,5 @@
 /**
- * Unhyped Feedback - sink
+ * Unhyped Feedback – sink
  *
  * Receives feedback reports and appends them to a Sheet.
  * Called server-side only (from a Next.js route handler), never from a browser.
@@ -9,7 +9,7 @@
 
 var SCHEMA_VERSION = 1;
 
-/** Column order. ADDITIVE ONLY - append new columns, never rename or reorder. */
+/** Column order. ADDITIVE ONLY – append new columns, never rename or reorder. */
 var HEADERS = [
   'id',
   'received_at',
@@ -55,6 +55,18 @@ var PARAM_DENYLIST = [
 var MAX_TEXT = 2000;
 var MAX_ERRORS = 4000;
 
+/**
+ * How long a submission waits for the script lock before answering `busy`.
+ *
+ * The lock is script-wide. A write normally holds it for well under a second,
+ * so three seconds is enough for two reporters pressing send together. It is
+ * deliberately short: a Google call that stalls while holding the lock keeps
+ * it until the execution is killed, up to six minutes, and every submission
+ * arriving in that window has to be told quickly and honestly that nothing was
+ * written. The route gives the sink 14 s in total, cold start included.
+ */
+var LOCK_WAIT_MS = 3000;
+
 // ---------------------------------------------------------------- entrypoints
 
 /**
@@ -70,8 +82,15 @@ function doGet(e) {
   });
 }
 
+/**
+ * Every failure answer names the `stage` it happened in, and `server` carries
+ * the exception text, so the route handler's log says where the sink was when
+ * it gave up. Without it an incident reads as "sink rejected: server" six
+ * times, which is what the October 2026 outage looked like from Vercel.
+ */
 function doPost(e) {
-  var lock = LockService.getScriptLock();
+  var stage = 'parse';
+  var lock = null;
 
   try {
     if (!e || !e.postData || !e.postData.contents) {
@@ -87,6 +106,7 @@ function doPost(e) {
 
     // Apps Script does NOT expose custom request headers to doPost.
     // The shared secret therefore travels in the body, not in X-Feedback-Token.
+    stage = 'auth';
     var expected = prop_('FEEDBACK_TOKEN');
     if (!expected || String(body.token) !== expected) {
       return json_({ ok: false, error: 'unauthorized' });
@@ -99,34 +119,67 @@ function doPost(e) {
       return json_({ ok: false, error: 'validation', fields: invalid });
     }
 
-    // appendRow is not atomic. Two concurrent writes can interleave.
-    lock.waitLock(10000);
-
-    var sheet = sheet_();
-    var headers = syncHeaders_(sheet);
+    // Everything that can happen without the lock happens before it: open the
+    // sheet, read the headers, build the row. Each of these is a remote call
+    // that can stall, and a stall inside the locked region blocks every other
+    // submission until Apps Script kills the execution.
+    stage = 'open_sheet';
+    var ss = spreadsheet_();
+    var sheet = ss.getSheetByName(tabName_());
+    stage = 'read_headers';
+    var headers = sheet && sheet.getLastRow() > 0 ? headerRow_(sheet) : [];
+    var deployment = deployment_();
     var id = 'fb_' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-    var record = buildRecord_(id, body);
+    var record = buildRecord_(id, body, deployment);
+    var row = rowFor_(headers, record);
 
-    // Write by header NAME, never by index - the sheet owner will reorder columns.
-    var row = headers.map(function (name) {
-      return escapeCell_(record[name]);
-    });
+    // The lock covers the header sync and the append. The sync is a
+    // read-then-write of the header row, and two first reports after a
+    // redeploy must not both add the missing column. Wait briefly, then give
+    // up: `busy` after three seconds is something the widget can explain and
+    // the reporter can retry; a 10 s wait that ends in a generic error is not.
+    stage = 'lock';
+    lock = LockService.getScriptLock();
+    if (!lock.tryLock(LOCK_WAIT_MS)) {
+      lock = null;
+      return json_({ ok: false, error: 'busy', stage: stage });
+    }
 
+    // A missing tab, an empty sheet, or a column added by a newer Code.gs is
+    // fixed on the first report that sees it, and only under the lock: two
+    // first reports arriving together must not both create the tab or both
+    // append the column. Re-read the headers here, not above, for the same
+    // reason. On a sheet that is in order this branch never runs.
+    if (!sheet || !headers.length || missingHeaders_(headers).length) {
+      stage = 'sync_headers';
+      sheet = sheet_(ss);
+      headers = syncHeaders_(sheet);
+      row = rowFor_(headers, record);
+    }
+
+    stage = 'append';
     sheet.appendRow(row);
+    // Commit before the lock is released, so the next holder sees this row.
+    SpreadsheetApp.flush();
 
-    return json_({ ok: true, id: id, deployment: deployment_() });
+    return json_({ ok: true, id: id, deployment: deployment });
 
   } catch (err) {
-    return json_({ ok: false, error: 'server', message: String(err) });
+    return json_({
+      ok: false,
+      error: 'server',
+      stage: stage,
+      message: String(err).slice(0, 300)
+    });
 
   } finally {
-    try { lock.releaseLock(); } catch (ignored) {}
+    if (lock) { try { lock.releaseLock(); } catch (ignored) {} }
   }
 }
 
 // -------------------------------------------------------------------- mapping
 
-function buildRecord_(id, b) {
+function buildRecord_(id, b, deployment) {
   var ctx = b.context || {};
 
   return {
@@ -164,19 +217,26 @@ function buildRecord_(id, b) {
 
     reporter_email:  text_(b.email, 200),
     user_agent_raw:  text_(ctx.userAgent, 500),
-    deployment:      deployment_(),
+    deployment:      deployment,
 
-    status:          '',   // filled in by hand - this is the client-facing column
+    status:          '',   // filled in by hand – this is the client-facing column
     notes:           '',   // internal. See README before sharing the sheet.
 
     reporter:        text_(b.reporter, 120)   // who filed it, as typed in the widget
   };
 }
 
+/** Write by header NAME, never by index: the sheet owner will reorder columns. */
+function rowFor_(headers, record) {
+  return headers.map(function (name) {
+    return escapeCell_(record[name]);
+  });
+}
+
 // ------------------------------------------------------------------ sanitising
 
 /**
- * Sheets evaluates any cell beginning with = + - @ or a control character.
+ * Sheets evaluates any cell beginning with = + – @ or a control character.
  * A report containing =IMPORTXML(...) would exfiltrate the sheet's contents
  * the moment someone opens it. Every text cell goes through this.
  */
@@ -223,12 +283,23 @@ function text_(value, max) {
 
 // ---------------------------------------------------------------------- sheet
 
-function sheet_() {
+function spreadsheet_() {
   var id = prop_('SHEET_ID');
   if (!id) throw new Error('SHEET_ID script property is not set');
+  return SpreadsheetApp.openById(id);
+}
 
-  var name = prop_('SHEET_TAB') || 'reports';
-  var ss = SpreadsheetApp.openById(id);
+function tabName_() {
+  return prop_('SHEET_TAB') || 'reports';
+}
+
+/**
+ * The reports tab, created and given its header row if it does not exist yet.
+ * Writes, so on the submission path it is only called under the lock.
+ */
+function sheet_(ss) {
+  ss = ss || spreadsheet_();
+  var name = tabName_();
   var sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);
 
@@ -251,9 +322,7 @@ function headerRow_(sheet) {
  */
 function syncHeaders_(sheet) {
   var existing = headerRow_(sheet);
-  var missing = HEADERS.filter(function (name) {
-    return existing.indexOf(name) === -1;
-  });
+  var missing = missingHeaders_(existing);
   if (!missing.length) return existing;
 
   var start = sheet.getLastColumn() + 1;
@@ -262,6 +331,13 @@ function syncHeaders_(sheet) {
 
   sheet.getRange(1, start, 1, missing.length).setValues([missing]).setFontWeight('bold');
   return existing.concat(missing);
+}
+
+/** Names from HEADERS that the given header row does not have. */
+function missingHeaders_(existing) {
+  return HEADERS.filter(function (name) {
+    return existing.indexOf(name) === -1;
+  });
 }
 
 function writeHeaders_(sheet) {
@@ -289,7 +365,7 @@ function json_(obj) {
 // These two are deliberately NOT suffixed with an underscore, unlike every
 // other helper in this file. In Apps Script a trailing underscore marks a
 // function as private, and a private function does not appear in the editor's
-// Run dropdown - which makes it impossible to run the one thing you are
+// Run dropdown – which makes it impossible to run the one thing you are
 // supposed to run before deploying. Do not "fix" them to match the convention.
 
 /** Run once from the editor, after setting the script properties. */
@@ -298,7 +374,7 @@ function setup() {
   if (sheet.getLastRow() === 0) writeHeaders_(sheet);
   syncHeaders_(sheet);
   Logger.log('Sheet ready: ' + sheet.getName() + ' with ' + HEADERS.length + ' columns');
-  Logger.log('Token set: ' + (prop_('FEEDBACK_TOKEN') ? 'yes' : 'NO - set it before deploying'));
+  Logger.log('Token set: ' + (prop_('FEEDBACK_TOKEN') ? 'yes' : 'NO – set it before deploying'));
 }
 
 /** Run from the editor to append a row without deploying. */

@@ -9,11 +9,27 @@ import { ContextStrip } from "./ContextStrip";
 
 export type PanelStatus = "idle" | "submitting" | "success" | "failed";
 
+/**
+ * Why the last send failed, so the note can ask for the right thing. `send`
+ * is the catch-all for "try again"; the rest ask the reporter to wait, fix a
+ * field, or accept that the row may already be there.
+ */
+export type Failure = "send" | "busy" | "timeout" | "rate_limited" | "validation";
+
+const failureNote: Record<Failure, string> = {
+  send: strings.errorSend,
+  busy: strings.errorBusy,
+  timeout: strings.errorTimeout,
+  rate_limited: strings.errorRateLimited,
+  validation: strings.errorValidation,
+};
+
 type Props = {
   context: FeedbackContext;
   draft: Draft;
   reporter: string;
   status: PanelStatus;
+  failure: Failure;
   invalid: RequiredField[];
   restored: boolean;
   stripExpanded: boolean;
@@ -31,6 +47,7 @@ export function Panel({
   draft,
   reporter,
   status,
+  failure,
   invalid,
   restored,
   stripExpanded,
@@ -96,7 +113,7 @@ export function Panel({
 
         {status === "failed" && (
           <div className="fb-note fb-note--error" role="alert">
-            <span>{strings.errorSend}</span>
+            <span>{failureNote[failure]}</span>
           </div>
         )}
 
@@ -161,7 +178,7 @@ export function Panel({
   );
 }
 
-/** Mobile-only title bar - on desktop the FAB sits 8 px below and is the close. */
+/** Mobile-only title bar – on desktop the FAB sits 8 px below and is the close. */
 function Header({ onClose }: { onClose: () => void }) {
   return (
     <>
@@ -178,7 +195,7 @@ function Header({ onClose }: { onClose: () => void }) {
 
 /**
  * The primary button's arrow: two glyphs in a clipped 1em window, swapped on
- * hover (the site's `.btn__arrow-slot`). Decorative - the label carries the name.
+ * hover (the site's `.btn__arrow-slot`). Decorative – the label carries the name.
  */
 function SendArrow() {
   return (

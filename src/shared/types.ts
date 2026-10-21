@@ -27,7 +27,7 @@ export type DeviceKind = "desktop" | "tablet" | "mobile";
 
 /**
  * Everything the browser knows about the moment the report was written.
- * `browser` / `os` / `device` are the CLIENT's parse - rendered in the
+ * `browser` / `os` / `device` are the CLIENT's parse – rendered in the
  * context strip. The server re-derives them from `userAgent` and never
  * trusts these three (D18).
  */
@@ -54,7 +54,7 @@ export type FeedbackContext = {
   userAgent: string;
 };
 
-/** What the widget POSTs to `/api/feedback`. No token - the server holds it. */
+/** What the widget POSTs to `/api/feedback`. No token – the server holds it. */
 export type FeedbackSubmission = {
   schemaVersion: number;
   project: string;
@@ -69,7 +69,7 @@ export type FeedbackSubmission = {
    */
   reporter: string;
   /**
-   * Dropped from the UI - the two questions that matter are what and why, and a
+   * Dropped from the UI – the two questions that matter are what and why, and a
    * third optional box mostly collected empty strings. The column stays in the
    * sheet (additive-only) and the field stays in the contract, so a consumer
    * that wants it back does not need a schema change.
@@ -87,11 +87,26 @@ export type SinkPayload = FeedbackSubmission & {
   country: string;
 };
 
+/**
+ * What the sink answers. `busy` means the script lock was held by another
+ * write for longer than the sink was willing to wait, and nothing was written.
+ * `stage` names where in `doPost` a failure happened; `message` is the
+ * exception text. Both exist so the route handler's log can say what the sink
+ * was doing when it failed.
+ */
 export type SinkResponse =
   | { ok: true; id: string; deployment?: string }
-  | { ok: false; error: string; fields?: string[]; message?: string };
+  | { ok: false; error: string; fields?: string[]; message?: string; stage?: string };
 
+/**
+ * What the widget gets back. Each failure code maps to a different sentence
+ * in the panel, because they ask for different things from the reporter:
+ * `busy` and `rate_limited` mean wait and retry, `timeout` means the row may
+ * or may not have been written, `validation` means fix a field.
+ */
 export type SubmitResponse =
   | { ok: true; id: string }
   | { ok: false; error: "validation"; fields: string[] }
-  | { ok: false; error: "rate_limited" | "unavailable" | "server" };
+  | { ok: false; error: "rate_limited" | "busy" | "timeout" | "unavailable" | "server" };
+
+export type SubmitError = Extract<SubmitResponse, { ok: false }>["error"];

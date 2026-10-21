@@ -11,14 +11,19 @@
  *                                                                 └─4xx/5xx▶ Failed
  *
  * There is deliberately no ConfirmDiscard state. The plan had one, but once
- * the draft persists (D17) closing loses nothing - the confirm dialog asked
+ * the draft persists (D17) closing loses nothing – the confirm dialog asked
  * permission for something that no longer happens, and a modal inside a modal
  * is the worst focus-trap surface in the widget. The restore line's
  * "Zacznij od nowa" is the discard.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SCHEMA_VERSION, type FeedbackContext, type SubmitResponse } from "../shared/types";
+import {
+  SCHEMA_VERSION,
+  type FeedbackContext,
+  type SubmitError,
+  type SubmitResponse,
+} from "../shared/types";
 import { stripDeepLinkParam } from "../shared/redact";
 import { strings } from "../shared/strings";
 import { validateReport, type RequiredField } from "../shared/validate";
@@ -26,7 +31,7 @@ import { collectContext } from "./context";
 import { clearDraft, readDraft, writeDraft, type Draft } from "./draft";
 import { initNav, onLocationChange } from "./nav";
 import { read, write } from "./storage";
-import { Panel, type PanelStatus } from "./Panel";
+import { Panel, type Failure, type PanelStatus } from "./Panel";
 
 export type Reveal = "always" | "invited";
 
@@ -48,13 +53,13 @@ const SUCCESS_CLOSE_MS = 4_000;
 const WARMUP_COOLDOWN_MS = 60_000;
 
 /**
- * Type and severity are no longer asked for in the form - the questions that
- * matter are what, why and who - but the sink still requires both fields
+ * Type and severity are no longer asked for in the form – the questions that
+ * matter are what, why and who – but the sink still requires both fields
  * (additive-only contract), so every report carries these two constants.
  */
 const EMPTY_DRAFT: Draft = { type: "bug", severity: "annoying", what: "", why: "" };
 
-/** Must match --fb-dur-fast in styles.ts - the panel unmounts when its exit ends. */
+/** Must match --fb-dur-fast in styles.ts – the panel unmounts when its exit ends. */
 const EXIT_MS = 180;
 
 const FOCUSABLE =
@@ -64,6 +69,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   const [open, setOpen] = useState(false);
   const [invited, setInvited] = useState(reveal === "always");
   const [status, setStatus] = useState<PanelStatus>("idle");
+  const [failure, setFailure] = useState<Failure>("send");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   /** Not part of the draft: the draft is per page, the reporter is per person. */
   const [reporter, setReporter] = useState("");
@@ -75,7 +81,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
   /**
    * The panel outlives `open` by one animation. Unmounting on close would make
    * it vanish mid-air, which is the single cheapest-looking thing an overlay
-   * can do - arriving with motion and leaving without it reads as a bug.
+   * can do – arriving with motion and leaving without it reads as a bug.
    */
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -168,14 +174,14 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
     if (now - warmedAt.current < WARMUP_COOLDOWN_MS) return;
     warmedAt.current = now;
     fetch(endpoint, { method: "GET" }).catch(() => {
-      // Fire and forget - a failed warm-up costs a slower submit, nothing else.
+      // Fire and forget – a failed warm-up costs a slower submit, nothing else.
     });
   }, [open, endpoint]);
 
   // --- navigating with the panel open --------------------------------------
   /**
    * The context is captured when the panel opens, so browsing on with the panel
-   * up left it describing the page you came from - a report filed against the
+   * up left it describing the page you came from – a report filed against the
    * wrong URL, which is the failure mode this widget exists to prevent.
    *
    * It re-reads only while the form is untouched. Once there is text in it, the
@@ -261,7 +267,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, status, closePanel, shadowRoot]);
 
-  // Focus the first field, not the close button - the panel exists to be typed in.
+  // Focus the first field, not the close button – the panel exists to be typed in.
   useEffect(() => {
     if (!open || status !== "idle") return;
     const field = panelRef.current?.querySelector<HTMLTextAreaElement>("#fb-what");
@@ -325,6 +331,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
 
       if (!result.ok) {
         if (result.error === "validation") setInvalid(result.fields as RequiredField[]);
+        setFailure(failureFor(result.error));
         setStatus("failed");
         return;
       }
@@ -335,7 +342,10 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
       clearDraft(pathnameRef.current);
       write("local", REPORTER_KEY, reporter.trim());
       setStatus("success");
-    } catch {
+    } catch (e) {
+      // Our own abort lands here. By then the route may have written the row,
+      // so the note says "no confirmation" rather than "failed".
+      setFailure(isAbort(e) ? "timeout" : "send");
       setStatus("failed");
     } finally {
       clearTimeout(timeout);
@@ -401,6 +411,7 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
             draft={draft}
             reporter={reporter}
             status={status}
+            failure={failure}
             invalid={invalid}
             restored={restored}
             stripExpanded={stripExpanded}
@@ -438,6 +449,23 @@ export function Widget({ project, endpoint, reveal, shadowRoot }: Props) {
       </button>
     </>
   );
+}
+
+/** Which note to show for a failure code the route answered with. */
+function failureFor(error: SubmitError): Failure {
+  switch (error) {
+    case "busy":
+    case "timeout":
+    case "rate_limited":
+    case "validation":
+      return error;
+    default:
+      return "send";
+  }
+}
+
+function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
 }
 
 function FeedbackIcon() {

